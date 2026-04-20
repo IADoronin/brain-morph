@@ -34,12 +34,84 @@ pip install torch numpy
 
 ### 1. **Volume Class** (Base Class)
 
-The `Volume` class provides the foundation for all 3D image operations:
-```python
-from src.utils.volume import Volume
+The `Volume` class extends PyTorch tensors with domain-specific functionality for 3D image processing. It maintains spatial metadata (affine transformations) while supporting all standard tensor operations.
 
-# Load and manage 3D brain images
-volume = Volume(image_tensor)
+#### Features
+
+- **Tensor Subclassing**: Inherits from `torch.Tensor` for seamless integration with PyTorch ecosystem
+- **Affine Metadata**: Stores and preserves spatial transformation matrices (4×4 affine)
+- **Type Preservation**: Arithmetic operations return `Volume` objects, not plain tensors
+- **GPU Support**: Full CUDA compatibility
+
+#### Methods
+
+##### `visualize(channel=None)`
+Display 3D volume using maximum intensity projections along three axes.
+
+```python
+brain = Volume(data)
+brain.visualize()  # All channels as RGB
+brain.visualize(channel=0)  # Single channel
+```
+
+Output shows 2×2 grid:
+- Top-left: XY projection (max over depth)
+- Top-right: XZ projection (max over height)  
+- Bottom-left: YZ projection (max over width)
+
+##### `normalize()`
+Normalize volume intensity to [0, 1] range using min-max scaling.
+
+```python
+brain_normalized = brain.normalize()
+```
+
+##### `resample(new_shape, mode='trilinear')`
+Resize volume to new dimensions using interpolation.
+
+**Parameters:**
+- `new_shape` (tuple): Target shape (D, H, W)
+- `mode` (str): Interpolation method - 'nearest', 'linear', 'bilinear', 'trilinear'
+
+```python
+brain_downsampled = brain.resample((32, 32, 32), mode='trilinear')
+```
+
+##### `rotate(theta, phi, center, interpolation='linear')`
+Apply 3D rotation around specified center point.
+
+**Parameters:**
+- `theta` (float): Rotation angle around X-axis (degrees)
+- `phi` (float): Rotation angle around Y-axis (degrees)
+- `center` (tuple): Rotation center in voxel coordinates (x, y, z)
+- `interpolation` (str): 'nearest', 'linear', 'bilinear', 'bicubic'
+
+```python
+# Rotate 30° around X, 45° around Y, centered at (50, 50, 50)
+rotated = brain.rotate(30, 45, (50, 50, 50), 'linear')
+```
+
+#### Usage Example
+
+```python
+from src.utils import Volume
+import torch
+
+# Load or create data
+data = torch.rand(3, 256, 256, 256)  # (C, D, H, W)
+
+# Create Volume
+brain = Volume(data)
+
+# Preprocessing pipeline
+brain = brain.normalize()
+brain_downsampled = brain.resample((64, 64, 64))
+
+# Visualization
+brain_downsampled.visualize()
+
+# Rotation for augmentation
+rotated = brain.rotate(theta=15, phi=20, center=(32, 32, 32))
 ```
 
 ### 2. **Mesh Transform**

@@ -7,6 +7,12 @@ import matplotlib.pyplot as plt
 import warnings
 import typing
 import torch.nn.functional as F
+try:
+    import nibabel as nib
+except Exception:
+    nib = None
+
+#Что сделать: добавить разрешение в мкм по разным осям, что актуально для конфокальной микроскопии
 class Volume(torch.Tensor):
     @staticmethod
     def __new__(cls, data, affine=None, *args, **kwargs):
@@ -40,10 +46,11 @@ class Volume(torch.Tensor):
         return res
     
     def visualize(self,channel=None):
+        plt.rcParams["image.resample"] = False
+        plt.rcParams['figure.autolayout'] = True
         """Визуализация 3D тензора максимальными проекциями по осям."""
-        
         channels, depth, height, width = self.shape
-        fig, axes = plt.subplots(2, 2, figsize=(13, 13))
+        fig, axes = plt.subplots(2, 2, figsize=(20, 20))
         plt.subplots_adjust(left=0, right=1, top=1, bottom=0, wspace=0, hspace=0)
         if channel is not None:
             vol = self[channel, :, :].squeeze(0)
@@ -75,6 +82,42 @@ class Volume(torch.Tensor):
         max_val = torch.max(self)
         normalized_data = (self - min_val) / (max_val - min_val)
         return Volume(normalized_data, affine=self.affine)
+    
+    @classmethod
+    def load_tiff_series(cls,file_names_mask):
+        pass
+    @classmethod
+    def load_nii(cls, file_path: str):
+        """
+        Load a NIfTI (.nii or .nii.gz) file and return a `Volume`.
+
+        Returns a `Volume` with shape (C, D, H, W) where C is channels (1 for typical
+        single-volume NIfTIs). Affine matrix (if present) is stored in `Volume.affine`.
+        """
+        if nib is None:
+            raise ImportError("nibabel is required to load NIfTI files. Install with `pip install nibabel`.")
+
+        img = nib.load(file_path)
+        data = img.get_fdata(dtype=np.float32)
+        affine = getattr(img, 'affine', None)
+
+        # Convert to (C, D, H, W)
+        if data.ndim == 3:
+            # single-channel volume
+            data = data[np.newaxis, ...]
+        elif data.ndim == 4:
+            # treat last dim as channels/time
+            # reorder from (X, Y, Z, C) to (C, Z, Y, X) -> (C, D, H, W)
+            data = np.moveaxis(data, -1, 0)
+        else:
+            raise ValueError(f"Unsupported NIfTI data dimensionality: {data.ndim}")
+
+        # Ensure ordering is (C, D, H, W)
+        # If spatial axes are (X,Y,Z) we treat them as (W,H,D) -> we want (C,D,H,W)
+        # Many neuroimaging tools use (X, Y, Z) as (W, H, D) already, so keep as-is.
+
+        tensor = torch.as_tensor(data)
+        return cls(tensor, affine=affine)
     def resample(self, new_shape:typing.Tuple[int,int,int], mode:str='trilinear'):
         """
         Изменяет размер объема до новой формы с использованием интерполяции.
@@ -101,6 +144,10 @@ class Volume(torch.Tensor):
         resized_data = resized_data.squeeze(0)  # Форма: (C, D, H, W)
         
         return Volume(resized_data, affine=self.affine)
+    @classmethod
+    def load_tiff(file_mask):
+        pass
+
     def rotate(self, theta, phi, center, interpolation='linear'):
         """
         Поворот 3D объема на PyTorch.
@@ -259,7 +306,7 @@ def test_volume():
 
 
 # # # %%
-test_volume()
+#test_volume()
 # # # %%
 
 # %%

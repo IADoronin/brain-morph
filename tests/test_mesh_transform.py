@@ -1,3 +1,4 @@
+#%%
 import os
 import sys
 import math
@@ -67,3 +68,5 @@ def test_shape_and_dtype_preserved():
 
 if __name__ == "__main__":
     pytest.main([os.path.abspath(__file__)])
+# %%
+
