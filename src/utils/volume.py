@@ -45,34 +45,44 @@ class Volume(torch.Tensor):
         
         return res
     
-    def visualize(self,channel=None):
-        plt.rcParams["image.resample"] = False
-        plt.rcParams['figure.autolayout'] = True
+    def visualize(self, channel=None):
         """Визуализация 3D тензора максимальными проекциями по осям."""
+        plt.rcParams["image.resample"] = False
         channels, depth, height, width = self.shape
-        fig, axes = plt.subplots(2, 2, figsize=(20, 20))
-        plt.subplots_adjust(left=0, right=1, top=1, bottom=0, wspace=0, hspace=0)
+
+        # Subplot sizes proportional to (D, H, W) so 1 voxel = same physical
+        # size in all three projections:
+        #   top-left  (H rows × D cols): width_ratio=D, height_ratio=H
+        #   top-right (H rows × W cols): width_ratio=W, height_ratio=H
+        #   bot-left  (W rows × D cols): width_ratio=D, height_ratio=W
+        scale = 10.0 / max(depth + width, height + width)
+        fig = plt.figure(figsize=((depth + width) * scale, (height + width) * scale))
+        gs = fig.add_gridspec(
+            2, 2,
+            width_ratios=[depth, width],
+            height_ratios=[height, width],
+            left=0, right=1, top=1, bottom=0, wspace=0, hspace=0,
+        )
+        ax00 = fig.add_subplot(gs[0, 0])
+        ax01 = fig.add_subplot(gs[0, 1])
+        ax10 = fig.add_subplot(gs[1, 0])
+        ax11 = fig.add_subplot(gs[1, 1])
+
         if channel is not None:
-            vol = self[channel, :, :].squeeze(0)
-
-            axes[0][0].imshow(torch.max(vol, dim=2)[0].T, cmap='gray')
-            axes[0][1].imshow(torch.max(vol, dim=0)[0], cmap='gray')
-            axes[1][0].imshow(torch.max(vol, dim=1)[0].T, cmap='gray')
-
-            for ax in (axes[0][0], axes[0][1], axes[1][0]):
-                ax.axis('off')
+            vol = self[channel]  # (D, H, W)
+            ax00.imshow(torch.max(vol, dim=2)[0].T, cmap='gray', aspect='auto')
+            ax01.imshow(torch.max(vol, dim=0)[0],   cmap='gray', aspect='auto')
+            ax10.imshow(torch.max(vol, dim=1)[0].T, cmap='gray', aspect='auto')
         else:
-            if channels >3:
+            if channels > 3:
                 warnings.warn("Number of channels > 3. Visualizing only first 3 channels as RGB image. The rest will be ignored for visualization.")
-            
-            axes[0][0].imshow(torch.max(self, dim=3)[0].permute([2,1,0])[:,:,:3])
-            axes[0][1].imshow(torch.max(self, dim=1)[0].permute([1,2,0])[:,:,:3])
-            axes[1][0].imshow(torch.max(self, dim=2)[0].T)
+            ax00.imshow(torch.max(self, dim=3)[0].permute([2, 1, 0])[:, :, :3], aspect='auto')
+            ax01.imshow(torch.max(self, dim=1)[0].permute([1, 2, 0])[:, :, :3], aspect='auto')
+            ax10.imshow(torch.max(self, dim=2)[0].T,                             aspect='auto')
 
-            for ax in (axes[0][0], axes[0][1], axes[1][0]):
-                ax.axis('off')
-        
-        axes[1][1].axis('off')
+        for ax in (ax00, ax01, ax10, ax11):
+            ax.axis('off')
+
         plt.show()
     def normalize(self):
         """

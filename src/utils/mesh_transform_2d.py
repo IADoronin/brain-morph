@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import typing
 import matplotlib.pyplot as plt
 
-def get_basis_2d(points: torch.Tensor):
+def get_basis_2d(points: torch.Tensor) -> torch.Tensor:
     """
     Compute 2D affine + bilinear polynomial basis for point coordinates.
     

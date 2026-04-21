@@ -5,7 +5,7 @@ import typing
 import matplotlib.pyplot as plt
 import mask_3d
 
-def get_basis_3d(points: torch.Tensor):
+def get_basis_3d(points: torch.Tensor) -> torch.Tensor:
     """
     Compute 3D affine + bilinear polynomial basis for point coordinates.
     
@@ -68,7 +68,7 @@ def get_bilinear_transform_3d(
 
 #%%
 
-def iter_grid_cells_3d(grid: torch.Tensor):
+def iter_grid_cells_3d(grid: torch.Tensor) -> typing.Iterator[torch.Tensor]:
     """
     Iterate over 2D grid cells as adjacent 2×2 corner blocks.
     
@@ -108,7 +108,7 @@ def iter_grid_cells_3d(grid: torch.Tensor):
 #     for face in faces_vertexes:
 #         #create surface
 #%%
-def mesh_transform_3d(image, grid_init, grid_target, method="bilinear", mask_init = None):
+def mesh_transform_3d(image: torch.Tensor, grid_init: torch.Tensor, grid_target: torch.Tensor, method: str = "bilinear", mask_init: typing.Optional[torch.Tensor] = None) -> torch.Tensor:
     """
     Warp a 3D image using bilinear mesh deformation.
     
