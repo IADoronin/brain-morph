@@ -130,7 +130,10 @@ def mesh_transform_2d(image, grid_init, grid_target, method="bilinear"):
     mesh_f = mesh.flatten(0,-2)
     #shape (H*W,2)
     mesh_transformed_f = torch.ones_like(mesh_f)*(-1)
+    assigned = torch.zeros(mesh_f.shape[0], dtype=torch.bool, device=mesh_f.device)
 
+    cell_centers: list[torch.Tensor] = []
+    cell_transforms: list[torch.Tensor] = []
 
     # Iterate over cells in grid
     for cell_init,cell_target in zip(
@@ -139,22 +142,31 @@ def mesh_transform_2d(image, grid_init, grid_target, method="bilinear"):
         ):
         # Get transform matrix for current cell
         transform_mat = get_bilinear_transform_2d(cell_init, cell_target)
-        #mask for current cell (not optimal, rewrite later)
         order = (0,0),(0,1),(1,1),(1,0),(0,0)
-        directed_edges = torch.stack([torch.tensor(cell_init[order[i+1]]) - 
-                      torch.tensor(cell_init[order[i]]) 
+        directed_edges = torch.stack([torch.tensor(cell_init[order[i+1]]) -
+                      torch.tensor(cell_init[order[i]])
                       for i in range(len(order)-1)],dim=-1)
         p_vecs = torch.stack([mesh - cell_init[order[i]] for i in range(len(order)-1)],dim=-1)
         cross_prods = directed_edges[0,:]*p_vecs[...,1,:] - \
             directed_edges[1,:]*p_vecs[...,0,:]
         mask = torch.all(cross_prods<=0,dim=-1)
         mask_f = mask.flatten()
-        # plt.imshow((mask))
-        # plt.show()
-         # Update mesh_transformed with transformed points for current cell
         mesh_transformed_f[mask_f] = (get_basis_2d(mesh_f[mask_f])@transform_mat).squeeze()
-        
-        #как будто надо вне итератора сделать
+        assigned[mask_f] = True
+        cell_centers.append(cell_init.flatten(0, -2).mean(0))
+        cell_transforms.append(transform_mat)
+
+    # Fallback: assign pixels on cell boundaries missed by the cross-product test
+    # due to floating-point precision — map each to the nearest cell centroid.
+    unassigned = ~assigned
+    if unassigned.any():
+        centers = torch.stack(cell_centers)  # (n_cells, 2)
+        nearest = torch.cdist(mesh_f[unassigned], centers).argmin(dim=1)
+        for cell_idx, transform_mat in enumerate(cell_transforms):
+            sel = (nearest == cell_idx)
+            if sel.any():
+                pts = unassigned.nonzero(as_tuple=True)[0][sel]
+                mesh_transformed_f[pts] = (get_basis_2d(mesh_f[pts]) @ transform_mat).squeeze()
     mesh_transformed_2 = mesh_transformed_f.reshape(mesh.shape).flip(dims=[2])
     # As grid_sample expects normalized coordinates in [-1, 1], we should normalize mesh_transformed 
     # accordingly if it's in pixel coordinates.

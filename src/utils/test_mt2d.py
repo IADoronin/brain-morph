@@ -56,13 +56,16 @@ plt.imshow(image5.permute([1,2,0]))
 plt.show() 
 
 # %%
-#test 3: random shift
+#test 3': reversed random shift
 image6 = mesh_transform_2d(image5, grid_target,grid_init)
 
 plt.imshow(image6.permute([1,2,0]))
 plt.show()
 plt.imshow((-image+image6).permute([1,2,0]))
 plt.show()
+
+plt.show()
+# %%
 # %%
 def test_visualization():
     grid_init = torch.stack(

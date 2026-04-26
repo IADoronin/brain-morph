@@ -59,7 +59,7 @@ image4 = mesh_transform_3d(image, grid_init, grid_target)
 image4.visualize()
 # %%
 #test 3: random shift
-grid_target = grid_init + torch.rand(grid_init.shape)/5
+grid_target = grid_init + torch.rand(grid_init.shape)/2
 
 image5 = mesh_transform_3d(image3, grid_init, grid_target)
 image5.visualize()

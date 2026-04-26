@@ -60,10 +60,22 @@ class MeshTransformer3D:
         index_map = torch.full(
             (n_voxels,), -1, dtype=torch.long, device=self._mesh_f.device
         )
+        cell_centers: list[torch.Tensor] = []
         for cell_idx, cell_init in enumerate(iter_grid_cells_3d(self.grid_init)):
             cell_init_d = cell_init.to(dtype=self._mesh_f.dtype, device=self._mesh_f.device)
             mask = mask_3d.innerpoints(cell_init_d, self._mesh_f)
             index_map[mask] = cell_idx
+            cell_centers.append(cell_init_d.flatten(0, -2).mean(0))
+
+        # Fallback for voxels on cell boundaries that innerpoints missed due to
+        # floating-point precision (scalars slightly > 0 instead of = 0).
+        # Assign each such voxel to the cell whose centroid is nearest.
+        unassigned = index_map == -1
+        if unassigned.any():
+            centers = torch.stack(cell_centers)  # (n_cells, 3)
+            dists = torch.cdist(self._mesh_f[unassigned], centers)  # (n_unassigned, n_cells)
+            index_map[unassigned] = dists.argmin(dim=1)
+
         return index_map
 
     @property
