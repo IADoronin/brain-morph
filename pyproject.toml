@@ -31,10 +31,10 @@ dependencies = [
     "numpy>=1.22",
     "opencv-python>=4.5",
     "matplotlib>=3.5",
+    "nibabel>=3.2",
 ]
 
 [project.optional-dependencies]
-io  = ["nibabel>=3.2"]
 dev = ["pytest>=7", "pytest-cov", "pip-tools"]
 
 [tool.setuptools.packages.find]

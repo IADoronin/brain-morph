@@ -11,8 +11,7 @@ mesh-based warping and attention-gated simulated annealing.
 ## Installation
 
 ```bash
-pip install brain-morph          # core (torch, numpy, opencv, matplotlib)
-pip install "brain-morph[io]"    # + NIfTI support (nibabel)
+pip install brain-morph
 ```
 
 > **GPU:** Install a CUDA-enabled PyTorch first — see [pytorch.org](https://pytorch.org/get-started/locally/).
@@ -68,7 +67,7 @@ See [notebooks/registration_demo.ipynb](notebooks/registration_demo.ipynb) for a
 ## Testing
 
 ```bash
-pip install "brain-morph[io,dev]"
+pip install "brain-morph[dev]"
 pytest tests/ -v
 ```
 
