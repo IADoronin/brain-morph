@@ -77,7 +77,7 @@ Core ideas drawn from:
 **Sergey Shuvaev** (CSHL, 2014–2021) — [KoulakovLab/Registration](https://github.com/KoulakovLab/Registration), licensed under GPL v3.0.
 
 Reference paper:
-> Shuvaev S.A. et al. *Quantitative neuroanatomy of all Purkinje cells with synaptic inputs in mouse cerebellum.* Scientific Reports 12, 3678 (2022). https://doi.org/10.1038/s41598-022-06871-8
+> Shuvaev S.A. et al. *Spatiotemporal 3D image registration for mesoscale studies of brain development.* Scientific Reports 12, 3678 (2022). https://www.nature.com/articles/s41598-022-06871-8
 
 ## License
 
