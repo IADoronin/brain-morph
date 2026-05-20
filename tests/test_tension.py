@@ -1,22 +1,4 @@
-#%%
-import os
-import sys
-import importlib.util
-
 import pytest
-
-_utils_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src", "utils"))
-
-
-def _load_module(name, filename):
-    if _utils_dir not in sys.path:
-        sys.path.insert(0, _utils_dir)
-    path = os.path.join(_utils_dir, filename)
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
 
 torch = None
 try:
@@ -26,11 +8,8 @@ except Exception:
 
 pytestmark = pytest.mark.skipif(torch is None, reason="torch is required")
 
-_tension_mod = None
-_transformer_mod = None
 if torch is not None:
-    _tension_mod = _load_module("compute_tension_3d", "compute_tension_3d.py")
-    _transformer_mod = _load_module("mesh_transformer_3d", "mesh_transformer_3d.py")
+    from brain_morph.utils import compute_tension_3d, MeshTransformer3D
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +86,7 @@ def make_deformed(grid, scale=0.1, seed=42):
 
 
 def _new(grid_part, grid_full=None, **kwargs):
-    return _tension_mod.compute_tension_3d(grid_part, grid_full, **kwargs)
+    return compute_tension_3d(grid_part, grid_full, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -277,7 +256,7 @@ def test_E3_large_deformation_finite():
 
 def test_F1_output_shape():
     grid = make_grid(3, 4, 5)
-    t = _transformer_mod.MeshTransformer3D(grid, (20, 24, 28))
+    t = MeshTransformer3D(grid, (20, 24, 28))
     mask = torch.ones(20, 24, 28, dtype=torch.bool)
     w = t._compute_cell_weights(mask)
     assert w.shape == (2, 3, 4), f"expected (2, 3, 4), got {w.shape}"
@@ -285,7 +264,7 @@ def test_F1_output_shape():
 
 def test_F2_all_ones_mask():
     grid = make_grid(3, 3, 3)
-    t = _transformer_mod.MeshTransformer3D(grid, (20, 24, 28))
+    t = MeshTransformer3D(grid, (20, 24, 28))
     mask = torch.ones(20, 24, 28, dtype=torch.bool)
     w = t._compute_cell_weights(mask)
     assert torch.allclose(w, torch.ones_like(w), atol=1e-5)
@@ -293,7 +272,7 @@ def test_F2_all_ones_mask():
 
 def test_F3_all_zeros_mask():
     grid = make_grid(3, 3, 3)
-    t = _transformer_mod.MeshTransformer3D(grid, (20, 24, 28))
+    t = MeshTransformer3D(grid, (20, 24, 28))
     mask = torch.zeros(20, 24, 28, dtype=torch.bool)
     w = t._compute_cell_weights(mask)
     assert (w == 0.0).all()
@@ -302,7 +281,7 @@ def test_F3_all_zeros_mask():
 def test_F4_weights_in_unit_range():
     torch.manual_seed(7)
     grid = make_grid(3, 3, 3)
-    t = _transformer_mod.MeshTransformer3D(grid, (20, 24, 28))
+    t = MeshTransformer3D(grid, (20, 24, 28))
     mask = torch.randint(0, 2, (20, 24, 28), dtype=torch.bool)
     w = t._compute_cell_weights(mask)
     assert (w >= 0.0).all() and (w <= 1.0).all()
@@ -311,7 +290,7 @@ def test_F4_weights_in_unit_range():
 def test_F5_spatial_correspondence():
     """Ячейки в первой половине H получают вес ≈ 1 при маске там же."""
     grid = make_grid(3, 3, 3)
-    t = _transformer_mod.MeshTransformer3D(grid, (20, 24, 28))
+    t = MeshTransformer3D(grid, (20, 24, 28))
     mask = torch.zeros(20, 24, 28, dtype=torch.bool)
     mask[:, :12, :] = True  # первая половина по H (y < 0 в нормированном пространстве)
     w = t._compute_cell_weights(mask)
@@ -326,20 +305,20 @@ def test_F5_spatial_correspondence():
 def test_G1_method_matches_standalone():
     g = make_grid(3, 3, 3)
     d = make_deformed(g, scale=0.1)
-    t = _transformer_mod.MeshTransformer3D(g, (20, 24, 28))
+    t = MeshTransformer3D(g, (20, 24, 28))
     assert torch.allclose(t.tension(d), _new(d, g), atol=1e-4)
 
 
 def test_G2_method_identity_zero():
     g = make_grid(3, 3, 3)
-    t = _transformer_mod.MeshTransformer3D(g, (20, 24, 28))
+    t = MeshTransformer3D(g, (20, 24, 28))
     assert t.tension(g).item() < 1e-6
 
 
 def test_G3_method_mask_zeros():
     g = make_grid(3, 3, 3)
     d = make_deformed(g, scale=0.2)
-    t = _transformer_mod.MeshTransformer3D(g, (20, 24, 28))
+    t = MeshTransformer3D(g, (20, 24, 28))
     mask = torch.zeros(20, 24, 28, dtype=torch.bool)
     assert t.tension(d, mask=mask).item() == 0.0
 
@@ -347,7 +326,7 @@ def test_G3_method_mask_zeros():
 def test_G4_method_mask_ones_equals_no_mask():
     g = make_grid(3, 3, 3)
     d = make_deformed(g, scale=0.1)
-    t = _transformer_mod.MeshTransformer3D(g, (20, 24, 28))
+    t = MeshTransformer3D(g, (20, 24, 28))
     mask = torch.ones(20, 24, 28, dtype=torch.bool)
     assert torch.allclose(t.tension(d, mask=mask), t.tension(d), atol=1e-5)
 
@@ -355,7 +334,7 @@ def test_G4_method_mask_ones_equals_no_mask():
 def test_G5_method_grid_ref_none_equals_init():
     g = make_grid(3, 3, 3)
     d = make_deformed(g, scale=0.1)
-    t = _transformer_mod.MeshTransformer3D(g, (20, 24, 28))
+    t = MeshTransformer3D(g, (20, 24, 28))
     assert torch.allclose(t.tension(d, grid_ref=None), t.tension(d, grid_ref=g), atol=1e-5)
 
 
@@ -363,14 +342,14 @@ def test_G6_method_grid_ref_custom_differs():
     g = make_grid(3, 3, 3)
     d = make_deformed(g, scale=0.1, seed=0)
     g_ref = make_deformed(g, scale=0.05, seed=1)
-    t = _transformer_mod.MeshTransformer3D(g, (20, 24, 28))
+    t = MeshTransformer3D(g, (20, 24, 28))
     assert not torch.allclose(t.tension(d, grid_ref=None), t.tension(d, grid_ref=g_ref), atol=1e-5)
 
 
 def test_G7_method_mode_squared_backward():
     g = make_grid(3, 3, 3)
     d = make_deformed(g, scale=0.1).requires_grad_(True)
-    t = _transformer_mod.MeshTransformer3D(g, (20, 24, 28))
+    t = MeshTransformer3D(g, (20, 24, 28))
     loss = t.tension(d, mode="squared")
     loss.backward()
     assert d.grad is not None
@@ -379,7 +358,7 @@ def test_G7_method_mode_squared_backward():
 
 def test_G8_reuse_transformer():
     g = make_grid(3, 3, 3)
-    t = _transformer_mod.MeshTransformer3D(g, (20, 24, 28))
+    t = MeshTransformer3D(g, (20, 24, 28))
     results = [t.tension(make_deformed(g, scale=0.1, seed=s)).item() for s in [0, 1, 2]]
     assert len(set(results)) == 3
 
@@ -394,7 +373,7 @@ if __name__ == "__main__":
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    if torch is not None and _tension_mod is not None:
+    if torch is not None:
         g = make_grid(3, 3, 3)
         torch.manual_seed(0)
         u = torch.randn_like(g)
@@ -416,8 +395,8 @@ if __name__ == "__main__":
         print("Saved /tmp/tension_vs_amplitude.png")
 
         #%% cell_weights для маски с выпавшей ОЛ
-        if _transformer_mod is not None:
-            t_obj = _transformer_mod.MeshTransformer3D(g, (20, 24, 28))
+        if True:
+            t_obj = MeshTransformer3D(g, (20, 24, 28))
             mask = torch.zeros(20, 24, 28, dtype=torch.bool)
             mask[:5, :, :] = True  # "ОЛ" = первые 5 срезов по глубине
             w = t_obj._compute_cell_weights(mask)

@@ -1,3 +1,8 @@
+# Copyright (C) 2026 Ivan Doronin <iadoronin@yandex.ru>
+# Based on original MATLAB implementation by Sergey Shuvaev (CSHL, 2014-2021).
+# This file is part of brain-morph, licensed under GNU GPL v3.0.
+# See LICENSE file in the project root for full license text.
+
 #%%
 import torch
 import torch.nn.functional as F
@@ -168,9 +173,8 @@ def mesh_transform_2d(image, grid_init, grid_target, method="bilinear"):
                 pts = unassigned.nonzero(as_tuple=True)[0][sel]
                 mesh_transformed_f[pts] = (get_basis_2d(mesh_f[pts]) @ transform_mat).squeeze()
     mesh_transformed_2 = mesh_transformed_f.reshape(mesh.shape).flip(dims=[2])
-    # As grid_sample expects normalized coordinates in [-1, 1], we should normalize mesh_transformed 
+    # As grid_sample expects normalized coordinates in [-1, 1], we should normalize mesh_transformed
     # accordingly if it's in pixel coordinates.
-    print(mesh_transformed_2[0,0,:])
     return F.grid_sample(image.unsqueeze(0), 
                          mesh_transformed_2.unsqueeze(0), 
                          mode="bilinear", align_corners=True,padding_mode="zeros").squeeze(0)

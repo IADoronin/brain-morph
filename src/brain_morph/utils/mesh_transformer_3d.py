@@ -1,14 +1,14 @@
-#%%
+# Copyright (C) 2026 Ivan Doronin <iadoronin@yandex.ru>
+# Based on original MATLAB implementation by Sergey Shuvaev (CSHL, 2014-2021).
+# This file is part of brain-morph, licensed under GNU GPL v3.0.
+# See LICENSE file in the project root for full license text.
+
 import torch
 import torch.nn.functional as F
-import sys
-import os
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-import mask_3d
-from mesh_transform_3d import get_basis_3d, get_bilinear_transform_3d, iter_grid_cells_3d
-from compute_tension_3d import compute_tension_3d
+from . import mask_3d
+from .mesh_transform_3d import get_basis_3d, get_bilinear_transform_3d, iter_grid_cells_3d
+from .compute_tension_3d import compute_tension_3d
 
 
 class MeshTransformer3D:
@@ -214,4 +214,3 @@ def mesh_transform_3d(
     transformer = MeshTransformer3D(grid_init, spatial)
     return transformer.transform(image, grid_target, method)
 
-# %%

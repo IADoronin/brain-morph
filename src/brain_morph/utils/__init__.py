@@ -1,12 +1,17 @@
-"""Utility modules for image processing and registration."""
+# Copyright (C) 2026 Ivan Doronin <iadoronin@yandex.ru>
+# This file is part of brain-morph, licensed under GNU GPL v3.0.
+# See LICENSE file in the project root for full license text.
 
-from .old_mesh_transform import create_regular_mesh, mesh_transform
-from .simulated_annealing import run_random_node_displacement_test
 from .volume import Volume
+from .mesh_transformer_3d import MeshTransformer3D
+from .tension_metrics import VolumeTension, BendingTension, TensionMetric
+from .compute_tension_3d import compute_tension_3d
 
 __all__ = [
-    "create_regular_mesh",
-    "old_mesh_transform",
-    "run_random_node_displacement_test",
     "Volume",
+    "MeshTransformer3D",
+    "VolumeTension",
+    "BendingTension",
+    "TensionMetric",
+    "compute_tension_3d",
 ]

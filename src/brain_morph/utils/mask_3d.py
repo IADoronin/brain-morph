@@ -1,3 +1,8 @@
+# Copyright (C) 2026 Ivan Doronin <iadoronin@yandex.ru>
+# Based on original MATLAB implementation by Sergey Shuvaev (CSHL, 2014-2021).
+# This file is part of brain-morph, licensed under GNU GPL v3.0.
+# See LICENSE file in the project root for full license text.
+
 #%%
 import numpy as np
 import torch
@@ -47,7 +52,6 @@ def innerpoint(cell,point):
     faces = get_faces(cell)
     triangles = triangulate_faces(faces)
     d = triangles.shape[0]
-    print(d//2)
     scalars = (get_normals(triangles)*(point-triangles[:,2,:].squeeze(1))).sum(dim=1)
     return (scalars[:d//2]<=0).all() and (scalars[d//2:]<=0).all()
 

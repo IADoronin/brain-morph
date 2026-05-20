@@ -1,0 +1,5 @@
+prune frontend
+prune backend
+prune data
+prune matlab
+prune notebooks

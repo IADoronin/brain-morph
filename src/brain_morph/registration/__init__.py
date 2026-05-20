@@ -1,18 +1,14 @@
-import sys, os as _os
-for _p in (
-    _os.path.join(_os.path.dirname(__file__), "..", "utils"),
-    _os.path.dirname(__file__),
-):
-    _p = _os.path.abspath(_p)
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+# Copyright (C) 2026 Ivan Doronin <iadoronin@yandex.ru>
+# This file is part of brain-morph, licensed under GNU GPL v3.0.
+# See LICENSE file in the project root for full license text.
 
-from cost import registration_cost
-from optimizers import MeshOptimizer, SAOptimizer, GradientOptimizer, HybridOptimizer
-from pipeline import Stage, RegistrationPipeline, interpolate_grid
+from .cost import registration_cost, normalise_channel_weights
+from .optimizers import MeshOptimizer, SAOptimizer, GradientOptimizer, HybridOptimizer
+from .pipeline import Stage, RegistrationPipeline, interpolate_grid
 
 __all__ = [
     "registration_cost",
+    "normalise_channel_weights",
     "MeshOptimizer",
     "SAOptimizer",
     "GradientOptimizer",

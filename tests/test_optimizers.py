@@ -1,21 +1,4 @@
-#%%
-import os
-import sys
-import importlib.util
-
 import pytest
-
-# ---------------------------------------------------------------------------
-# Path setup
-# ---------------------------------------------------------------------------
-_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-_utils_dir = os.path.join(_root, "src", "utils")
-_reg_dir   = os.path.join(_root, "src", "registration")
-
-for _p in (_utils_dir, _reg_dir, os.path.join(_root, "src")):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
 
 torch = None
 try:
@@ -26,9 +9,8 @@ except Exception:
 pytestmark = pytest.mark.skipif(torch is None, reason="torch is required")
 
 if torch is not None:
-    from mesh_transformer_3d import MeshTransformer3D
-    from cost import registration_cost
-    from optimizers import SAOptimizer, GradientOptimizer, HybridOptimizer
+    from brain_morph.utils import MeshTransformer3D
+    from brain_morph.registration import registration_cost, SAOptimizer, GradientOptimizer, HybridOptimizer
 
 
 # ---------------------------------------------------------------------------
@@ -280,9 +262,7 @@ def test_O9_sa_convergence():
 
 #%%
 if __name__ == "__main__":
-    import sys as _sys
-    _sys.path.insert(0, os.path.join(_root, "src", "utils"))
-    from volume import Volume
+    from brain_morph.utils import Volume
     import matplotlib.pyplot as plt
 
     if torch is not None:

@@ -1,22 +1,5 @@
-#%%
 import os
-import sys
-import importlib.util
-
 import pytest
-
-_utils_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src", "utils"))
-
-
-def _load_module(name, filename):
-    if _utils_dir not in sys.path:
-        sys.path.insert(0, _utils_dir)
-    path = os.path.join(_utils_dir, filename)
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
 
 torch = None
 try:
@@ -26,9 +9,10 @@ except Exception:
 
 pytestmark = pytest.mark.skipif(torch is None, reason="torch is required")
 
-_mod = None
 if torch is not None:
-    _mod = _load_module("mesh_transformer_3d", "mesh_transformer_3d.py")
+    from brain_morph.utils import MeshTransformer3D
+    from brain_morph.utils.mesh_transformer_3d import mesh_transform_3d
+    from brain_morph.utils import Volume
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +44,7 @@ def make_grid(ny=3, nx=3, nz=3):
 
 def test_instantiation():
     grid = make_grid()
-    t = _mod.MeshTransformer3D(grid, (20, 24, 28))
+    t = MeshTransformer3D(grid, (20, 24, 28))
     assert t.cell_index_map.shape == (20 * 24 * 28,)
     assert t.cell_index_map.dtype == torch.long
 
@@ -68,13 +52,13 @@ def test_instantiation():
 def test_wrong_grid_dim_raises():
     bad = torch.zeros(3, 3, 3, 2)  # last dim should be 3
     with pytest.raises(ValueError):
-        _mod.MeshTransformer3D(bad, (20, 24, 28))
+        MeshTransformer3D(bad, (20, 24, 28))
 
 
 def test_wrong_image_shape_dim_raises():
     grid = make_grid()
     with pytest.raises(ValueError):
-        _mod.MeshTransformer3D(grid, (20, 24))  # 2-tuple instead of 3
+        MeshTransformer3D(grid, (20, 24))  # 2-tuple instead of 3
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +67,7 @@ def test_wrong_image_shape_dim_raises():
 
 def test_cell_index_map_covers_interior():
     grid = make_grid()
-    t = _mod.MeshTransformer3D(grid, (20, 24, 28))
+    t = MeshTransformer3D(grid, (20, 24, 28))
     unassigned = (t.cell_index_map == -1).sum().item()
     total = 20 * 24 * 28
     assert unassigned / total < 0.01, f"Too many unassigned voxels: {unassigned}/{total}"
@@ -93,7 +77,7 @@ def test_cell_index_map_range():
     ny, nx, nz = 3, 4, 5
     grid = make_grid(ny, nx, nz)
     n_cells = (ny - 1) * (nx - 1) * (nz - 1)
-    t = _mod.MeshTransformer3D(grid, (16, 16, 16))
+    t = MeshTransformer3D(grid, (16, 16, 16))
     valid = t.cell_index_map[t.cell_index_map >= 0]
     assert valid.max().item() <= n_cells - 1
 
@@ -105,7 +89,7 @@ def test_cell_index_map_range():
 def test_identity_3d_input():
     grid = make_grid()
     vol = make_gaussian_volume()  # (D, H, W)
-    t = _mod.MeshTransformer3D(grid, vol.shape)
+    t = MeshTransformer3D(grid, vol.shape)
     result = t.transform(vol, grid)
     assert result.shape == (1, *vol.shape), "3D input gets a channel dim added"
     assert torch.allclose(result.squeeze(0), vol, atol=1e-4)
@@ -114,7 +98,7 @@ def test_identity_3d_input():
 def test_identity_4d_input():
     grid = make_grid()
     vol = make_gaussian_volume(channels=3)  # (3, D, H, W)
-    t = _mod.MeshTransformer3D(grid, vol.shape[1:])
+    t = MeshTransformer3D(grid, vol.shape[1:])
     result = t.transform(vol, grid)
     assert result.shape == vol.shape
     assert torch.allclose(result, vol, atol=1e-4)
@@ -123,7 +107,7 @@ def test_identity_4d_input():
 def test_identity_single_channel():
     grid = make_grid()
     vol = make_gaussian_volume(channels=1)  # (1, D, H, W)
-    t = _mod.MeshTransformer3D(grid, vol.shape[1:])
+    t = MeshTransformer3D(grid, vol.shape[1:])
     result = t.transform(vol, grid)
     assert result.shape == vol.shape
     assert torch.allclose(result, vol, atol=1e-4)
@@ -136,7 +120,7 @@ def test_identity_single_channel():
 def test_transform_changes_volume():
     grid = make_grid()
     vol = make_gaussian_volume(channels=1)
-    t = _mod.MeshTransformer3D(grid, vol.shape[1:])
+    t = MeshTransformer3D(grid, vol.shape[1:])
     result = t.transform(vol, grid + 0.2)
     assert (result - vol).abs().mean().item() > 1e-4
 
@@ -145,7 +129,7 @@ def test_scale_up_then_down():
     """Scale up then scale down should roughly restore the original."""
     grid = make_grid()
     vol = make_gaussian_volume(channels=1)
-    t = _mod.MeshTransformer3D(grid, vol.shape[1:])
+    t = MeshTransformer3D(grid, vol.shape[1:])
 
     scaled_up = t.transform(vol, grid * 1.5)
     # build a new transformer with the same grid (grid_init = grid, target = grid / 1.5)
@@ -167,7 +151,7 @@ def test_reuse_different_images():
     vol2 = torch.rand_like(vol1)
     grid_target = grid + torch.rand_like(grid) * 0.1
 
-    t = _mod.MeshTransformer3D(grid, vol1.shape[1:])
+    t = MeshTransformer3D(grid, vol1.shape[1:])
     r1 = t.transform(vol1, grid_target)
     r2 = t.transform(vol2, grid_target)
 
@@ -179,7 +163,7 @@ def test_reuse_different_images():
 def test_reuse_different_targets():
     grid = make_grid()
     vol = make_gaussian_volume(channels=1)
-    t = _mod.MeshTransformer3D(grid, vol.shape[1:])
+    t = MeshTransformer3D(grid, vol.shape[1:])
 
     r1 = t.transform(vol, grid + 0.15)
     r2 = t.transform(vol, grid - 0.15)
@@ -195,9 +179,9 @@ def test_standalone_matches_class():
     vol = make_gaussian_volume(channels=1)
     grid_target = grid + torch.rand_like(grid) * 0.1
 
-    t = _mod.MeshTransformer3D(grid, vol.shape[1:])
+    t = MeshTransformer3D(grid, vol.shape[1:])
     result_class = t.transform(vol, grid_target)
-    result_fn = _mod.mesh_transform_3d(vol, grid, grid_target)
+    result_fn = mesh_transform_3d(vol, grid, grid_target)
 
     assert torch.allclose(result_class, result_fn, atol=1e-6)
 
@@ -209,14 +193,14 @@ def test_standalone_matches_class():
 def test_wrong_target_shape_raises():
     grid = make_grid(3, 3, 3)
     vol = make_gaussian_volume(channels=1)
-    t = _mod.MeshTransformer3D(grid, vol.shape[1:])
+    t = MeshTransformer3D(grid, vol.shape[1:])
     with pytest.raises(ValueError):
         t.transform(vol, make_grid(4, 4, 4))
 
 
 def test_wrong_image_shape_raises():
     grid = make_grid()
-    t = _mod.MeshTransformer3D(grid, (20, 24, 28))
+    t = MeshTransformer3D(grid, (20, 24, 28))
     wrong_vol = make_gaussian_volume(D=10, H=10, W=10, channels=1)
     with pytest.raises(ValueError):
         t.transform(wrong_vol, grid)
@@ -229,7 +213,7 @@ def test_wrong_image_shape_raises():
 def test_dtype_preserved():
     grid = make_grid()
     vol = make_gaussian_volume(channels=2).to(torch.float64)
-    t = _mod.MeshTransformer3D(grid, vol.shape[1:], dtype=torch.float64)
+    t = MeshTransformer3D(grid, vol.shape[1:], dtype=torch.float64)
     result = t.transform(vol, grid)
     assert result.dtype == vol.dtype
 
@@ -245,14 +229,6 @@ if __name__ == "__main__":
 import random
 from math import cos, sin, pi
 
-if _utils_dir not in sys.path:
-    sys.path.insert(0, _utils_dir)
-
-import volume as vol_mod
-Volume = vol_mod.Volume
-
-if torch is not None and _mod is not None:
-    _load_module("mesh_transform_3d", "mesh_transform_3d.py")
 
 
 def gen_rand_color():
@@ -285,7 +261,7 @@ def create_colored_volume(D=100, H=120, W=160, block=18, step=20):
 grid_vis = make_grid(2, 3, 4)
 image_vis = create_colored_volume()
 print("Image shape:", image_vis.shape)
-transformer_vis = _mod.MeshTransformer3D(grid_vis, image_vis.shape[1:])
+transformer_vis = MeshTransformer3D(grid_vis, image_vis.shape[1:])
 print("Cell index map shape:", transformer_vis.cell_index_map.shape)
 print(f"Unassigned voxels: {(transformer_vis.cell_index_map == -1).sum().item()}")
 
@@ -328,7 +304,7 @@ Volume(image_deformed).visualize()
 
 # %%
 # --- test 5': reversed transformation ---
-transformer_vis_reversed = _mod.MeshTransformer3D(grid_random, image_vis.shape[1:])
+transformer_vis_reversed = MeshTransformer3D(grid_random, image_vis.shape[1:])
 
 image_reversed = transformer_vis_reversed.transform(image_deformed, grid_vis)
 print("--- Random local deformation ---")

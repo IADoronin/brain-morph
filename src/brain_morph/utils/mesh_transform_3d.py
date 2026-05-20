@@ -1,9 +1,13 @@
-#%%
+# Copyright (C) 2026 Ivan Doronin <iadoronin@yandex.ru>
+# Based on original MATLAB implementation by Sergey Shuvaev (CSHL, 2014-2021).
+# This file is part of brain-morph, licensed under GNU GPL v3.0.
+# See LICENSE file in the project root for full license text.
+
 import torch
 import torch.nn.functional as F
 import typing
 import matplotlib.pyplot as plt
-import mask_3d
+from . import mask_3d
 
 def get_basis_3d(points: torch.Tensor) -> torch.Tensor:
     """
@@ -172,9 +176,8 @@ def mesh_transform_3d(image: torch.Tensor, grid_init: torch.Tensor, grid_target:
         mesh_transformed_f[mask_f] = (get_basis_3d(mesh_f[mask_f])@transform_mat).squeeze()
         
     mesh_transformed_2 = mesh_transformed_f.reshape(mesh.shape).flip([-1])
-    # As grid_sample expects normalized coordinates in [-1, 1], we should normalize mesh_transformed 
+    # As grid_sample expects normalized coordinates in [-1, 1], we should normalize mesh_transformed
     # accordingly if it's in pixel coordinates.
-    print(mesh_transformed_2[0,0,0,:])
     return F.grid_sample(image.unsqueeze(0), 
                          mesh_transformed_2.unsqueeze(0), 
                          mode="bilinear", align_corners=True,padding_mode="zeros").squeeze(0)

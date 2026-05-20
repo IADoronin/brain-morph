@@ -1,16 +1,4 @@
-#%%
-import os
-import sys
 import pytest
-
-_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for _p in (
-    os.path.join(_root, "src", "utils"),
-    os.path.join(_root, "src", "registration"),
-    os.path.join(_root, "src"),
-):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
 
 torch = None
 try:
@@ -21,10 +9,11 @@ except Exception:
 pytestmark = pytest.mark.skipif(torch is None, reason="torch is required")
 
 if torch is not None:
-    from pipeline import Stage, RegistrationPipeline, interpolate_grid
-    from optimizers import SAOptimizer, GradientOptimizer
-    from mesh_transformer_3d import MeshTransformer3D
-    from cost import registration_cost
+    from brain_morph.registration import (
+        Stage, RegistrationPipeline, interpolate_grid,
+        SAOptimizer, GradientOptimizer, registration_cost,
+    )
+    from brain_morph.utils import MeshTransformer3D
 
 
 # ---------------------------------------------------------------------------

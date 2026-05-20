@@ -1,5 +1,10 @@
+# Copyright (C) 2026 Ivan Doronin <iadoronin@yandex.ru>
+# Based on original MATLAB implementation by Sergey Shuvaev (CSHL, 2014-2021).
+# This file is part of brain-morph, licensed under GNU GPL v3.0.
+# See LICENSE file in the project root for full license text.
+
 import torch
-from tension_metrics import TensionMetric, VolumeTension
+from .tension_metrics import TensionMetric, VolumeTension
 
 
 def compute_tension_3d(

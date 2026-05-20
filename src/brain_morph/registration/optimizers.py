@@ -1,22 +1,18 @@
+# Copyright (C) 2026 Ivan Doronin <iadoronin@yandex.ru>
+# Based on original MATLAB implementation by Sergey Shuvaev (CSHL, 2014-2021).
+# This file is part of brain-morph, licensed under GNU GPL v3.0.
+# See LICENSE file in the project root for full license text.
+
 from __future__ import annotations
 
 import math
-import sys
-import os
 from abc import ABC, abstractmethod
 
 import torch
 
-_utils_dir = os.path.join(os.path.dirname(__file__), "..", "utils")
-_reg_dir   = os.path.dirname(__file__)
-for _p in (_utils_dir, _reg_dir):
-    _p = os.path.abspath(_p)
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-from cost import registration_cost, normalise_channel_weights
-from mesh_transformer_3d import MeshTransformer3D
-from tension_metrics import TensionMetric
+from .cost import registration_cost, normalise_channel_weights
+from ..utils.mesh_transformer_3d import MeshTransformer3D
+from ..utils.tension_metrics import TensionMetric
 
 
 class MeshOptimizer(ABC):

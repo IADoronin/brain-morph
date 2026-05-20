@@ -1,3 +1,7 @@
+# Copyright (C) 2026 Ivan Doronin <iadoronin@yandex.ru>
+# This file is part of brain-morph, licensed under GNU GPL v3.0.
+# See LICENSE file in the project root for full license text.
+
 import torch
 from typing import Protocol, runtime_checkable
 

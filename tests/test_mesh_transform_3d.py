@@ -1,9 +1,8 @@
 #%%
-import volume
-from mesh_transform_3d import *
+from brain_morph.utils import Volume
+from brain_morph.utils.mesh_transform_3d import *
 from math import cos, sin, pi
 import random
-import volume
 #%%
 def gen_rand_color(i=255):
     tetta= (random.random())*pi/3

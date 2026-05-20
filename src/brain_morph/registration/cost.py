@@ -1,13 +1,13 @@
-import sys
-import os
+# Copyright (C) 2026 Ivan Doronin <iadoronin@yandex.ru>
+# Based on original MATLAB implementation by Sergey Shuvaev (CSHL, 2014-2021).
+# This file is part of brain-morph, licensed under GNU GPL v3.0.
+# See LICENSE file in the project root for full license text.
 
 import torch
 import torch.nn.functional as F
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "utils"))
-
-from mesh_transformer_3d import MeshTransformer3D
-from tension_metrics import TensionMetric
+from ..utils.mesh_transformer_3d import MeshTransformer3D
+from ..utils.tension_metrics import TensionMetric
 
 
 def _pearson_corr(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:

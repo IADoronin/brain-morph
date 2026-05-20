@@ -5,9 +5,27 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "brain-morph"
 version = "0.1.0"
-description = "Mesh-based 3D brain image registration"
+description = "Python reimplementation of mesh-based 3D brain registration (original algorithm by S. Shuvaev, CSHL)"
 readme = "README.md"
-requires-python = ">=3.9"
+license = {file = "LICENSE"}
+authors = [{name = "Ivan Doronin", email = "iadoronin@yandex.ru"}]
+requires-python = ">=3.10"
+keywords = [
+    "brain registration", "image registration", "3D registration",
+    "neuroscience", "mesh deformation", "simulated annealing", "pytorch",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
 dependencies = [
     "torch>=2.0",
     "numpy>=1.22",

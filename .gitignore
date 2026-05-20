@@ -35,8 +35,7 @@ ENV/
 .DS_Store
 
 # Jupyter
-.ipynb_checkpoints
-*.ipynb
+.ipynb_checkpoints/
 
 # PyTorch
 *.pth
