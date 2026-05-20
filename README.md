@@ -55,6 +55,15 @@ See [notebooks/registration_demo.ipynb](notebooks/registration_demo.ipynb) for a
 - **Tissue masking** — per-cell weights suppress regularization in empty regions
 - **NIfTI and TIFF** input support
 
+## Differences from the original MATLAB implementation
+
+- **Deformed reference grid for fixed image.** The original always uses a regular identity grid as the registration reference. This implementation allows passing an arbitrary pre-deformed grid as the reference, enabling sequential or incremental registration (e.g. aligning to a population atlas built from previous registrations).
+- **GPU acceleration.** The PyTorch backend runs on any CUDA-capable GPU, giving 10–50× speedup over CPU for large volumes.
+- **Gradient-based and hybrid optimizers.** The original supports only simulated annealing. This implementation adds `GradientOptimizer` (Adam / SGD / LBFGS) and `HybridOptimizer` (global SA exploration followed by gradient refinement).
+- **Bending energy regularization.** In addition to the original volumetric (5-tetrahedra) deformation energy, a bending energy metric penalises second-order curvature of the displacement field.
+- **Multiple similarity metrics.** Supports Pearson correlation (original), normalised cross-correlation (NCC), and MSE.
+- **Modular Python API.** Optimizers, metrics, and pipeline stages are independent, composable objects — easy to extend or replace individual components.
+
 ## Testing
 
 ```bash
@@ -64,8 +73,11 @@ pytest tests/ -v
 
 ## Acknowledgements
 
-Original algorithm and MATLAB implementation by
-**Sergey Shuvaev** (CSHL, 2014–2021), licensed under GPL v3.0.
+Original algorithm and MATLAB implementation:
+**Sergey Shuvaev** (CSHL, 2014–2021) — [KoulakovLab/Registration](https://github.com/KoulakovLab/Registration), licensed under GPL v3.0.
+
+Reference paper:
+> Shuvaev S.A. et al. *Quantitative neuroanatomy of all Purkinje cells with synaptic inputs in mouse cerebellum.* Scientific Reports 12, 3678 (2022). https://doi.org/10.1038/s41598-022-06871-8
 
 ## License
 
