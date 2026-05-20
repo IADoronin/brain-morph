@@ -3,6 +3,7 @@
 Mesh-based 3D brain image registration for mesoscale developmental studies.
 PyTorch backend with GPU support.
 
+**Author:** Ivan Doronin  
 Python reimplementation of an algorithm originally developed by
 **Sergey Shuvaev** (Cold Spring Harbor Laboratory, 2014–2021).
 
@@ -63,7 +64,7 @@ pytest tests/ -v
 
 ## Acknowledgements
 
-Python reimplementation based on original MATLAB code by
+Original algorithm and MATLAB implementation by
 **Sergey Shuvaev** (CSHL, 2014–2021), licensed under GPL v3.0.
 
 ## License
