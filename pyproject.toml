@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "brain-morph"
+version = "0.1.0"
+description = "Mesh-based 3D brain image registration"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "torch>=2.0",
+    "numpy>=1.22",
+    "opencv-python>=4.5",
+    "matplotlib>=3.5",
+]
+
+[project.optional-dependencies]
+io  = ["nibabel>=3.2"]
+dev = ["pytest>=7", "pytest-cov", "pip-tools"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
