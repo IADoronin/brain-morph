@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "brain-morph"
-version = "0.1.2"
+version = "0.1.3"
 description = "Mesh-based 3D brain image registration in Python, inspired by S. Shuvaev's work (CSHL, 2014-2021)"
 readme = "README.md"
 license = {file = "LICENSE"}

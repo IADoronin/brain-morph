@@ -43,7 +43,8 @@ transformer = MeshTransformer3D(grid, im_moving.shape)
 warped = transformer.transform(im_moving, grid)
 ```
 
-See [notebooks/registration_demo.ipynb](https://github.com/IADoronin/brain-morph/blob/main/notebooks/registration_demo.ipynb) for a full walkthrough.
+See [notebooks/registration_demo.ipynb](https://github.com/IADoronin/brain-morph/blob/main/notebooks/registration_demo.ipynb) for a full walkthrough with synthetic data,
+and [notebooks/brain_from_tif_reg.ipynb](https://github.com/IADoronin/brain-morph/blob/main/notebooks/brain_from_tif_reg.ipynb) for a real-data example (TIFF series, multi-stage pipeline).
 
 ## Key features
 
