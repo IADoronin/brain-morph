@@ -1,0 +1,1700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brain Morph</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/drawflow/dist/drawflow.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #1a1a2e;
+    --surface:  #16213e;
+    --panel:    #0f3460;
+    --accent:   #e94560;
+    --accent2:  #533483;
+    --text:     #e0e0e0;
+    --text-dim: #8a8a9a;
+    --border:   #2a2a4a;
+    --node-bg:  #1e2a4a;
+    --success:  #4caf50;
+    --warning:  #ff9800;
+    --radius:   8px;
+    --sidebar-w: 220px;
+    --palette-w: 300px;
+  }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 16px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+    z-index: 10;
+  }
+  header .logo { font-size: 18px; font-weight: 700; color: var(--accent); letter-spacing: 1px; }
+  header .logo span { color: var(--text); }
+  header .spacer { flex: 1; }
+  header .session-name {
+    color: var(--text-dim); font-size: 13px;
+    padding: 4px 10px; background: var(--bg);
+    border-radius: 4px; border: 1px solid var(--border);
+    min-width: 160px; text-align: center;
+  }
+  .btn {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    padding: 6px 14px; border-radius: var(--radius); cursor: pointer;
+    font-size: 13px; transition: background .15s;
+  }
+  .btn:hover { background: var(--accent2); }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .btn:disabled:hover { background: var(--panel); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); }
+  .btn.primary:hover { background: #c73652; }
+  .btn.success { background: #1b5e20; border-color: var(--success); color: var(--success); }
+  .btn.success:hover { background: #2e7d32; }
+
+  /* ── MAIN LAYOUT ── */
+  #layout {
+    display: grid;
+    grid-template-columns: var(--sidebar-w) 1fr var(--palette-w);
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── SIDEBAR ── */
+  #sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: width .2s;
+  }
+  #sidebar.collapsed { width: 0; overflow: hidden; }
+
+  .sidebar-section { padding: 10px; border-bottom: 1px solid var(--border); }
+  .sidebar-section h3 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--text-dim); margin-bottom: 8px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .sidebar-section h3 button {
+    background: none; border: none; color: var(--text-dim); cursor: pointer;
+    font-size: 14px; padding: 0 4px;
+  }
+  .sidebar-section h3 button:hover { color: var(--text); }
+
+  .session-list, .protocol-list {
+    list-style: none; display: flex; flex-direction: column; gap: 4px;
+  }
+  .session-list li, .protocol-list li {
+    padding: 6px 8px; border-radius: 4px; cursor: pointer;
+    font-size: 13px; transition: background .1s;
+    display: flex; align-items: center; gap: 6px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .session-list li:hover, .protocol-list li:hover { background: var(--panel); }
+  .session-list li.active { background: var(--panel); border-left: 2px solid var(--accent); }
+  .protocol-list li .p-del {
+    margin-left: auto; background: none; border: none; color: transparent;
+    cursor: pointer; font-size: 14px; padding: 0 2px; line-height: 1; flex-shrink: 0;
+  }
+  .protocol-list li:hover .p-del { color: var(--text-dim); }
+  .protocol-list li:hover .p-del:hover { color: var(--accent); }
+  .session-list li .dot {
+    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  }
+  .dot.done { background: var(--success); }
+  .dot.running { background: var(--warning); animation: pulse 1s infinite; }
+  .dot.idle { background: var(--text-dim); }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  .session-date { font-size: 10px; color: var(--text-dim); margin-left: auto; }
+
+  /* ── CANVAS ── */
+  #canvas-wrap {
+    position: relative;
+    overflow: hidden;
+    background: radial-gradient(ellipse at center, #1a1a3e 0%, var(--bg) 70%);
+  }
+  #drawflow { width: 100%; height: 100%; }
+
+  #canvas-toolbar {
+    position: absolute; top: 12px; left: 12px; z-index: 5;
+    display: flex; gap: 6px;
+  }
+  #canvas-toolbar .btn { padding: 5px 10px; font-size: 12px; }
+
+  #canvas-hint {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    text-align: center; color: var(--text-dim); pointer-events: none;
+    transition: opacity .3s;
+  }
+  #canvas-hint .hint-icon { font-size: 48px; margin-bottom: 12px; }
+  #canvas-hint p { font-size: 14px; }
+
+  /* ── DRAWFLOW OVERRIDES ── */
+  .drawflow { background: transparent !important; }
+  .drawflow .drawflow-node {
+    background: var(--node-bg) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius) !important;
+    color: var(--text) !important;
+    min-width: 160px !important;
+    padding: 0 !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,.4) !important;
+  }
+  .drawflow .drawflow-node.selected {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px rgba(233,69,96,.3), 0 4px 16px rgba(0,0,0,.4) !important;
+  }
+  .drawflow .drawflow-node .drawflow_content_node { padding: 0; }
+  .drawflow .connection .main-path { stroke: var(--accent2) !important; stroke-width: 2 !important; }
+  .drawflow .connection .main-path:hover { stroke: var(--accent) !important; }
+
+  /* node card */
+  .node-card { display: flex; flex-direction: column; }
+  .node-header {
+    padding: 8px 12px 6px;
+    display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .node-icon { font-size: 18px; }
+  .node-title { font-size: 13px; font-weight: 600; }
+  .node-del {
+    margin-left: auto; background: none; border: none;
+    color: var(--border); cursor: pointer; font-size: 15px;
+    padding: 0 2px; line-height: 1; flex-shrink: 0; transition: color .1s;
+  }
+  .drawflow-node:hover .node-del { color: var(--text-dim); }
+  .node-del:hover { color: var(--accent) !important; }
+  .node-status {
+    margin-left: auto; font-size: 10px; padding: 2px 6px;
+    border-radius: 10px; background: var(--border);
+  }
+  .node-status.ready { background: #1b5e20; color: var(--success); }
+  .node-status.running { background: #4a3900; color: var(--warning); }
+  .node-body { padding: 6px 12px 10px; font-size: 12px; color: var(--text-dim); min-height: 28px; }
+  .node-actions { padding: 4px 8px 8px; display: flex; gap: 4px; }
+  .node-btn {
+    flex: 1; background: var(--panel); border: 1px solid var(--border);
+    color: var(--text); border-radius: 4px; padding: 4px 0; cursor: pointer;
+    font-size: 11px; transition: background .1s;
+  }
+  .node-btn:hover { background: var(--accent2); }
+  .node-btn.run-btn { border-color: var(--success); color: var(--success); }
+  .node-btn.run-btn:hover { background: #1b5e20; }
+
+  /* ── RIGHT PANEL ── */
+  #right-panel {
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  /* ── PALETTE ── */
+  #palette {
+    padding: 10px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  #palette h3 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--text-dim); margin-bottom: 8px;
+  }
+  .palette-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 10px; margin-bottom: 4px;
+    background: var(--node-bg); border: 1px solid var(--border);
+    border-radius: var(--radius); cursor: grab;
+    font-size: 13px; user-select: none;
+    transition: border-color .15s, transform .1s;
+  }
+  .palette-item:hover { border-color: var(--accent2); }
+  .palette-item:active { cursor: grabbing; transform: scale(.97); }
+  .palette-item .p-icon { font-size: 16px; }
+  .palette-item .p-label { font-size: 12px; }
+
+  /* ── SETTINGS PANEL ── */
+  #settings-panel {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  #settings-panel h3 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--text-dim); margin-bottom: 12px;
+  }
+  #settings-content { font-size: 13px; }
+  #settings-content .placeholder {
+    color: var(--text-dim); font-size: 12px; text-align: center;
+    padding: 20px 0;
+  }
+
+  .form-group { margin-bottom: 10px; }
+  .form-group label { display: block; font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
+  .form-group input, .form-group select, .form-group textarea {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); border-radius: 4px; padding: 5px 8px; font-size: 12px;
+  }
+  .form-group input:focus, .form-group select:focus {
+    outline: none; border-color: var(--accent2);
+  }
+  .form-group select option { background: var(--bg); }
+
+  /* ── BATCH PANEL ── */
+  #batch-panel {
+    flex-shrink: 0;
+  }
+  .batch-header {
+    padding: 8px 12px;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--text-dim);
+    display: flex; align-items: center; justify-content: space-between;
+    cursor: pointer; user-select: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .batch-header:hover { color: var(--text); background: rgba(255,255,255,.02); }
+  .batch-header .batch-title { display: flex; align-items: center; gap: 8px; }
+  .batch-badge {
+    background: var(--accent); color: #fff; font-size: 9px;
+    padding: 1px 5px; border-radius: 8px; font-weight: 600;
+  }
+
+  #batch-body { padding: 10px 12px; }
+
+  .batch-sub-header {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
+    color: var(--text-dim); margin: 10px 0 5px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .batch-sub-header .bsh-label { flex: 1; }
+
+  .batch-scroll { max-height: 140px; overflow-y: auto; margin-bottom: 4px; }
+
+  /* samples list */
+  .sample-row {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 6px; border-radius: 4px; font-size: 12px;
+  }
+  .sample-row:hover { background: var(--panel); }
+  .sample-row .s-name {
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    cursor: default;
+  }
+  .sample-row .s-type {
+    font-size: 9px; color: var(--text-dim); background: var(--border);
+    border-radius: 3px; padding: 1px 5px; flex-shrink: 0;
+  }
+  .del-btn {
+    background: none; border: none; color: var(--text-dim);
+    cursor: pointer; font-size: 14px; padding: 0 2px; line-height: 1;
+    flex-shrink: 0;
+  }
+  .del-btn:hover { color: var(--accent); }
+
+  /* pairs table */
+  .pairs-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .pairs-table th {
+    text-align: left; padding: 4px 4px 4px 0;
+    color: var(--text-dim); border-bottom: 1px solid var(--border);
+    font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: .4px;
+  }
+  .pairs-table td { padding: 3px 2px; }
+  .pairs-table select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); border-radius: 3px; padding: 3px 4px; font-size: 11px;
+  }
+  .pairs-table tr:hover td { background: rgba(255,255,255,.02); }
+
+  /* batch info box */
+  .batch-info {
+    font-size: 10px; color: var(--text-dim);
+    background: var(--bg); border-radius: 4px; padding: 6px 8px;
+    margin-bottom: 8px; line-height: 1.5;
+  }
+  .batch-info code { color: var(--accent); font-family: monospace; font-size: 10px; }
+
+  /* ── WIZARD ── */
+  #wizard-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.6); z-index: 100;
+    align-items: center; justify-content: center;
+  }
+  #wizard-overlay.open { display: flex; }
+
+  #wizard {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; width: 560px; max-width: 95vw;
+    box-shadow: 0 20px 60px rgba(0,0,0,.6);
+  }
+  .wizard-header {
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .wizard-header h2 { font-size: 15px; }
+  .wizard-close { background: none; border: none; color: var(--text-dim); font-size: 20px; cursor: pointer; }
+  .wizard-close:hover { color: var(--text); }
+
+  .wizard-steps {
+    display: flex; padding: 12px 20px; gap: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .wizard-step {
+    flex: 1; text-align: center; font-size: 11px; color: var(--text-dim);
+    position: relative; padding-bottom: 8px;
+  }
+  .wizard-step::after {
+    content: ''; position: absolute; bottom: 0; left: 50%; right: -50%;
+    height: 2px; background: var(--border);
+  }
+  .wizard-step:last-child::after { display: none; }
+  .wizard-step.active { color: var(--accent); }
+  .wizard-step.active::after { background: var(--accent); }
+  .wizard-step.done { color: var(--success); }
+  .wizard-step .step-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--border); font-size: 11px; margin-bottom: 4px;
+  }
+  .wizard-step.active .step-num { background: var(--accent); color: #fff; }
+  .wizard-step.done .step-num { background: var(--success); color: #fff; }
+
+  .wizard-body { padding: 20px; min-height: 200px; }
+  .wizard-footer {
+    padding: 12px 20px; border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between;
+  }
+
+  /* stages table */
+  .stages-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .stages-table th {
+    text-align: left; padding: 6px 8px; color: var(--text-dim);
+    border-bottom: 1px solid var(--border); font-weight: 500;
+  }
+  .stages-table td { padding: 4px 4px; }
+  .stages-table input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); border-radius: 3px; padding: 4px 6px; font-size: 12px;
+  }
+  .stages-table tr:hover td { background: rgba(255,255,255,.02); }
+
+  .optimizer-cards {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    margin-bottom: 16px;
+  }
+  .opt-card {
+    border: 2px solid var(--border); border-radius: var(--radius);
+    padding: 10px; cursor: pointer; text-align: center; transition: border-color .15s;
+  }
+  .opt-card:hover { border-color: var(--accent2); }
+  .opt-card.selected { border-color: var(--accent); background: rgba(233,69,96,.08); }
+  .opt-card .opt-icon { font-size: 22px; margin-bottom: 4px; }
+  .opt-card .opt-name { font-size: 12px; font-weight: 600; }
+  .opt-card .opt-desc { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+
+  .params-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .sim-group { display: flex; gap: 6px; }
+  .sim-btn {
+    flex: 1; padding: 7px 0; text-align: center;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    cursor: pointer; font-size: 12px; transition: border-color .1s;
+  }
+  .sim-btn:hover { border-color: var(--accent2); }
+  .sim-btn.selected { border-color: var(--accent); background: rgba(233,69,96,.1); color: var(--accent); }
+
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .summary-item {
+    background: var(--bg); border-radius: var(--radius);
+    padding: 10px 12px;
+  }
+  .summary-item .s-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; }
+  .summary-item .s-value { font-size: 14px; font-weight: 600; margin-top: 2px; color: var(--accent); }
+
+  /* ── MISC ── */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent2); }
+
+  #toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 20px; border-radius: var(--radius);
+    font-size: 13px; z-index: 200; opacity: 0;
+    transition: opacity .3s; pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- ═══ HEADER ═══ -->
+<header>
+  <span class="logo">🧠 Brain<span>Morph</span></span>
+  <button class="btn" id="btn-toggle-sidebar" title="Toggle sidebar">☰</button>
+  <div class="session-name" id="session-name-display">Untitled session</div>
+  <div class="spacer"></div>
+  <button class="btn" id="btn-new">+ New</button>
+  <button class="btn" id="btn-save">💾 Save</button>
+  <button class="btn success" id="btn-run">▶ Run</button>
+</header>
+
+<!-- ═══ LAYOUT ═══ -->
+<div id="layout">
+
+  <!-- ── SIDEBAR ── -->
+  <aside id="sidebar">
+    <div class="sidebar-section" id="sessions-section">
+      <h3>
+        Sessions
+        <button onclick="toggleSection('sessions-list')">▾</button>
+      </h3>
+      <ul class="session-list" id="sessions-list"></ul>
+      <button class="btn" style="width:100%;margin-top:8px;font-size:11px"
+              onclick="newSession()">+ New session</button>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>
+        Protocols
+        <button onclick="toggleSection('protocol-list')">▾</button>
+      </h3>
+      <ul class="protocol-list" id="protocol-list"></ul>
+      <button class="btn" style="width:100%;margin-top:8px;font-size:11px"
+              onclick="saveAsProtocol()">+ Save current as protocol</button>
+    </div>
+  </aside>
+
+  <!-- ── CANVAS ── -->
+  <div id="canvas-wrap">
+    <div id="canvas-toolbar">
+      <button class="btn" onclick="clearCanvas()" title="Clear canvas">🗑</button>
+      <button class="btn" onclick="zoomReset()" title="Reset zoom">⊙</button>
+    </div>
+    <div id="canvas-hint">
+      <div class="hint-icon">⟶</div>
+      <p>Drag nodes from the right panel<br>onto the canvas to build a pipeline</p>
+    </div>
+    <div id="drawflow"></div>
+  </div>
+
+  <!-- ── RIGHT PANEL ── -->
+  <div id="right-panel">
+
+    <!-- Palette -->
+    <div id="palette">
+      <h3>Nodes</h3>
+      <div class="palette-item" draggable="true" data-node="load_tiff">
+        <span class="p-icon">📁</span><span class="p-label">Load TIFF Series</span>
+      </div>
+      <div class="palette-item" draggable="true" data-node="load_nii">
+        <span class="p-icon">📂</span><span class="p-label">Load NIfTI</span>
+      </div>
+      <div class="palette-item" draggable="true" data-node="filter">
+        <span class="p-icon">🔬</span><span class="p-label">Filter</span>
+      </div>
+      <div class="palette-item" draggable="true" data-node="register">
+        <span class="p-icon">🧠</span><span class="p-label">Register</span>
+      </div>
+      <div class="palette-item" draggable="true" data-node="save">
+        <span class="p-icon">💾</span><span class="p-label">Save</span>
+      </div>
+      <div class="palette-item" draggable="true" data-node="view">
+        <span class="p-icon">👁</span><span class="p-label">View (3D)</span>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div id="settings-panel">
+      <h3>Settings</h3>
+      <div id="settings-content">
+        <div class="placeholder">Select a node to configure it</div>
+      </div>
+    </div>
+
+    <!-- Batch Panel -->
+    <div id="batch-panel">
+      <div class="batch-header" onclick="toggleBatchPanel()">
+        <div class="batch-title">
+          Batch
+          <span class="batch-badge" id="batch-badge" style="display:none">0</span>
+        </div>
+        <span id="batch-toggle-icon">▾</span>
+      </div>
+      <div id="batch-body">
+
+        <!-- Folder + Mask -->
+        <div class="form-group" style="margin-top:10px">
+          <label>Samples folder</label>
+          <div style="display:flex;gap:4px">
+            <input type="text" id="batch-folder" placeholder="/data/brains"
+                   oninput="batchState.folder=this.value" style="flex:1;min-width:0">
+            <button class="btn" style="padding:4px 8px;font-size:11px;flex-shrink:0"
+                    onclick="browseFolder()" title="Browse">…</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Filename mask</label>
+          <input type="text" id="batch-mask" value="*.nii.gz"
+                 placeholder="*.nii.gz  or  *C001Z*.tif"
+                 oninput="batchState.mask=this.value">
+        </div>
+        <button class="btn" style="width:100%;font-size:12px"
+                onclick="scanFolder()">🔍 Scan folder</button>
+
+        <!-- Samples list -->
+        <div class="batch-sub-header">
+          <span class="bsh-label">Samples (<span id="batch-sample-count">0</span>)</span>
+          <button class="btn" style="padding:2px 8px;font-size:10px"
+                  onclick="addSampleManual()">+ Add</button>
+        </div>
+        <div class="batch-scroll" id="samples-list">
+          <div style="color:var(--text-dim);font-size:11px;text-align:center;padding:10px 0">
+            Scan folder to load samples
+          </div>
+        </div>
+
+        <!-- Pairs table -->
+        <div class="batch-sub-header">
+          <span class="bsh-label">Pairs (<span id="batch-pairs-count">0</span>)</span>
+          <button class="btn" style="padding:2px 8px;font-size:10px"
+                  onclick="addPair()">+ Pair</button>
+        </div>
+        <div class="batch-scroll" id="pairs-list">
+          <div style="color:var(--text-dim);font-size:11px;text-align:center;padding:8px 0">
+            No pairs defined
+          </div>
+        </div>
+
+        <!-- Output info -->
+        <div class="batch-info" id="batch-info" style="display:none">
+          Output: <code id="batch-out-path">{folder}/results/{moving}_to_{fixed}/</code>
+        </div>
+
+        <button class="btn success" id="btn-run-batch"
+                style="width:100%;margin-bottom:12px;font-size:12px"
+                onclick="runBatch()" disabled>
+          ▶ Run Batch
+        </button>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ WIZARD ═══ -->
+<div id="wizard-overlay">
+  <div id="wizard">
+    <div class="wizard-header">
+      <h2>🧠 Configure Registration</h2>
+      <button class="wizard-close" onclick="closeWizard()">✕</button>
+    </div>
+    <div class="wizard-steps">
+      <div class="wizard-step active" id="wstep-0">
+        <div class="step-num">1</div><br>Optimizer
+      </div>
+      <div class="wizard-step" id="wstep-1">
+        <div class="step-num">2</div><br>Stages
+      </div>
+      <div class="wizard-step" id="wstep-2">
+        <div class="step-num">3</div><br>Confirm
+      </div>
+    </div>
+    <div class="wizard-body" id="wizard-body"></div>
+    <div class="wizard-footer">
+      <button class="btn" id="wizard-back" onclick="wizardBack()">← Back</button>
+      <button class="btn primary" id="wizard-next" onclick="wizardNext()">Next →</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<input type="file" id="folder-input" webkitdirectory multiple style="display:none">
+
+<script src="https://cdn.jsdelivr.net/npm/drawflow/dist/drawflow.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════
+//  State
+// ═══════════════════════════════════════════════════════
+let editor;
+let currentSession = null;
+let selectedNodeId = null;
+let wizardStep = 0;
+let wizardNodeId = null;
+
+const wizardData = {
+  optimizer: 'SA',
+  temp_start: '1e-3',
+  temp_end: '3.3e-5',
+  coeff_start: '0.2',
+  similarity: 'corr',
+  stages: [
+    { grid: '3,3,3', steps: 2000, lam: '5e-2', scale: 8 },
+    { grid: '5,5,5', steps: 2000, lam: '2e-2', scale: 8 },
+    { grid: '7,7,7', steps: 2000, lam: '1e-2', scale: 4 },
+    { grid: '9,9,9', steps: 2000, lam: '2e-3', scale: 1 },
+  ]
+};
+
+// ═══════════════════════════════════════════════════════
+//  Batch state
+// ═══════════════════════════════════════════════════════
+const batchState = {
+  folder: '',
+  mask: '*.nii.gz',
+  samples: [],   // [{id, name, path, type, selected}]
+  pairs: [],     // [{id, movingId, fixedId}]
+  collapsed: false,
+};
+let _sampleIdSeq = 0;
+let _pairIdSeq = 0;
+
+function toggleBatchPanel() {
+  batchState.collapsed = !batchState.collapsed;
+  document.getElementById('batch-body').style.display = batchState.collapsed ? 'none' : '';
+  document.getElementById('batch-toggle-icon').textContent = batchState.collapsed ? '▸' : '▾';
+}
+
+// ── File helpers ──────────────────────────────────────
+function matchGlob(name, mask) {
+  if (!mask || mask === '*') return true;
+  const re = new RegExp(
+    '^' + mask.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+              .replace(/\*/g, '.*')
+              .replace(/\?/g, '.')
+    + '$', 'i');
+  return re.test(name);
+}
+
+function stemName(filename) {
+  return filename.replace(/(\.\w+)+$/, '');
+}
+
+function detectType(filename) {
+  if (/\.nii(\.gz)?$/i.test(filename)) return 'NIfTI';
+  if (/\.tiff?$/i.test(filename))      return 'TIFF';
+  return 'file';
+}
+
+// Determine series prefix: strip trailing digits (and optional separator)
+// "brain_C001Z042.tif" → "brain_C001Z"
+// "sample-007.tif"     → "sample-"
+function seriesPrefix(basename) {
+  return basename
+    .replace(/\.tiff?$/i, '')
+    .replace(/[-_]?\d+$/, '');
+}
+
+// Auto-detect mask from a list of file names
+function autoDetectMask(names) {
+  const niis  = names.filter(n => /\.nii(\.gz)?$/i.test(n));
+  const tiffs = names.filter(n => /\.tiff?$/i.test(n));
+
+  if (niis.length > 0 && tiffs.length === 0) {
+    if (niis.every(n => /\.nii\.gz$/i.test(n))) return '*.nii.gz';
+    if (niis.every(n => /\.nii$/i.test(n)))     return '*.nii';
+    return '*.nii*';
+  }
+
+  if (tiffs.length > 1) {
+    const ext = (tiffs[0].match(/\.tiff?$/i) || ['.tif'])[0];
+    const stems = tiffs.map(n => n.replace(/\.tiff?$/i, ''));
+    // Common prefix across all stems
+    let prefix = stems[0];
+    for (const s of stems.slice(1)) {
+      while (prefix && !s.startsWith(prefix)) prefix = prefix.slice(0, -1);
+    }
+    // Trim trailing digits/separators — those are the varying part
+    prefix = prefix.replace(/[-_]?\d*$/, '');
+    return (prefix ? `${prefix}*` : '*') + ext;
+  }
+
+  if (tiffs.length === 1) {
+    const ext = (tiffs[0].match(/\.tiff?$/i) || ['.tif'])[0];
+    return `*${ext}`;
+  }
+  return null;
+}
+
+// Group TIFF files into series by common prefix
+function groupTiffSeries(files) {
+  const groups = {};
+  for (const f of files) {
+    const key = seriesPrefix(f.name) || stemName(f.name);
+    (groups[key] = groups[key] || []).push(f);
+  }
+  return groups;
+}
+
+function _applyFolderFiles(folderName, files) {
+  const allNames = files.map(f => f.name);
+
+  // Auto-detect mask and update the input field
+  const detected = autoDetectMask(allNames);
+  if (detected) {
+    document.getElementById('batch-mask').value = detected;
+    batchState.mask = detected;
+  }
+
+  const mask    = batchState.mask || '*';
+  const matched = files.filter(f => matchGlob(f.name, mask));
+  if (!matched.length) { toast(`No files match mask "${mask}"`); return; }
+
+  document.getElementById('batch-folder').value = folderName;
+  batchState.folder = folderName;
+
+  const tiffs  = matched.filter(f => /\.tiff?$/i.test(f.name));
+  const niis   = matched.filter(f => /\.nii(\.gz)?$/i.test(f.name));
+  const others = matched.filter(f => !(/\.tiff?$/i.test(f.name)) && !(/\.nii(\.gz)?$/i.test(f.name)));
+
+  const samples = [];
+
+  // NIfTI: one sample per file
+  for (const f of niis) {
+    samples.push({
+      id: ++_sampleIdSeq,
+      name: stemName(f.name),
+      path: f.webkitRelativePath || f.name,
+      type: 'NIfTI', selected: true,
+    });
+  }
+
+  // TIFF: group by series prefix → one sample per series
+  if (tiffs.length > 0) {
+    const groups = groupTiffSeries(tiffs);
+    const ext    = (tiffs[0].name.match(/\.tiff?$/i) || ['.tif'])[0];
+    for (const [prefix, groupFiles] of Object.entries(groups)) {
+      samples.push({
+        id: ++_sampleIdSeq,
+        name: prefix || 'series',
+        path: `${folderName}/${prefix}*${ext}`,
+        type: 'TIFF',
+        count: groupFiles.length,
+        selected: true,
+      });
+    }
+  }
+
+  // Other files: one sample each
+  for (const f of others) {
+    samples.push({
+      id: ++_sampleIdSeq,
+      name: stemName(f.name),
+      path: f.webkitRelativePath || f.name,
+      type: detectType(f.name), selected: true,
+    });
+  }
+
+  batchState.samples = samples;
+  renderSamplesTable();
+  updateBatchUI();
+
+  const seriesCount = tiffs.length > 0
+    ? ` (${Object.keys(groupTiffSeries(tiffs)).length} series, ${tiffs.length} slices)`
+    : '';
+  toast(`${samples.length} sample${samples.length !== 1 ? 's' : ''} loaded${seriesCount}`);
+}
+
+async function browseFolder() {
+  // Modern API (Chrome 86+, Edge 86+)
+  if (window.showDirectoryPicker) {
+    try {
+      const handle = await window.showDirectoryPicker({ mode: 'read' });
+      const fakeFiles = [];
+      for await (const [name, entry] of handle.entries()) {
+        if (entry.kind === 'file') fakeFiles.push({ name, webkitRelativePath: name });
+      }
+      _applyFolderFiles(handle.name, fakeFiles);
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return; // user cancelled
+      // fall through to input fallback
+    }
+  }
+  // Fallback: <input webkitdirectory> (Firefox, Safari)
+  document.getElementById('folder-input').click();
+}
+
+function scanFolder() {
+  const folder = document.getElementById('batch-folder').value.trim();
+  const mask   = document.getElementById('batch-mask').value.trim() || '*';
+  if (!folder) { toast('Select or enter folder path first'); return; }
+
+  // If folder was set via picker, samples are already loaded — just re-filter
+  if (batchState.samples.length) {
+    toast(`${batchState.samples.length} samples already loaded from picker`);
+    return;
+  }
+
+  // Stub for remote/typed path: generate fake names
+  const ext  = mask.replace(/\*/g, '').replace(/\?/g, '');
+  const base = folder.split(/[/\\]/).filter(Boolean).pop() || 'sample';
+  const fakeNames = [base+'_p7', base+'_p14', base+'_p21', base+'_p28', base+'_p35'];
+  batchState.samples = fakeNames.map(n => ({
+    id: ++_sampleIdSeq, name: n,
+    path: `${folder}/${n}${ext}`,
+    type: detectType(ext), selected: true,
+  }));
+  batchState.folder = folder;
+  renderSamplesTable();
+  updateBatchUI();
+  toast(`${batchState.samples.length} samples (stub — connect backend for real scan)`);
+}
+
+function addSampleManual() {
+  const name = prompt('Sample name (without extension):');
+  if (!name) return;
+  const defaultPath = `${batchState.folder || '/data'}/${name}${batchState.mask.replace(/\*/g,'')}`;
+  const path = prompt('Full path:', defaultPath);
+  if (path === null) return;
+  const ext  = path.split('.').slice(1).join('.');
+  const type = ext.includes('nii') ? 'NIfTI' : ext.includes('tif') ? 'TIFF' : 'file';
+  batchState.samples.push({ id: ++_sampleIdSeq, name, path, type, selected: true });
+  renderSamplesTable();
+  updateBatchUI();
+}
+
+function removeSample(id) {
+  batchState.samples = batchState.samples.filter(s => s.id !== id);
+  batchState.pairs   = batchState.pairs.filter(p => p.movingId !== id && p.fixedId !== id);
+  renderSamplesTable();
+  renderPairsTable();
+  updateBatchUI();
+}
+
+function toggleSample(id, checked) {
+  const s = batchState.samples.find(x => x.id === id);
+  if (s) s.selected = checked;
+}
+
+function renderSamplesTable() {
+  const el = document.getElementById('samples-list');
+  document.getElementById('batch-sample-count').textContent = batchState.samples.length;
+  if (!batchState.samples.length) {
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:11px;text-align:center;padding:8px 0">No samples</div>';
+    return;
+  }
+  el.innerHTML = batchState.samples.map(s => `
+    <div class="sample-row">
+      <input type="checkbox" ${s.selected ? 'checked' : ''}
+             onchange="toggleSample(${s.id},this.checked)" title="${s.path}">
+      <span class="s-name" title="${s.path}">${s.name}</span>
+      <span class="s-type">${s.type}${s.count ? ' ×'+s.count : ''}</span>
+      <button class="del-btn" onclick="removeSample(${s.id})" title="Remove">×</button>
+    </div>`).join('');
+}
+
+function addPair(movingId, fixedId) {
+  const samples = batchState.samples;
+  if (!samples.length) { toast('Scan or add samples first'); return; }
+  const mId = movingId != null ? movingId : (samples[0]?.id ?? null);
+  const fId = fixedId  != null ? fixedId  : (samples[1]?.id ?? samples[0]?.id ?? null);
+  if (mId == null || fId == null) return;
+  batchState.pairs.push({ id: ++_pairIdSeq, movingId: mId, fixedId: fId });
+  renderPairsTable();
+  updateBatchUI();
+}
+
+function removePair(id) {
+  batchState.pairs = batchState.pairs.filter(p => p.id !== id);
+  renderPairsTable();
+  updateBatchUI();
+}
+
+function updatePair(id, key, value) {
+  const p = batchState.pairs.find(x => x.id === id);
+  if (p) p[key] = +value;
+}
+
+function renderPairsTable() {
+  const el = document.getElementById('pairs-list');
+  document.getElementById('batch-pairs-count').textContent = batchState.pairs.length;
+  if (!batchState.pairs.length) {
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:11px;text-align:center;padding:6px 0">No pairs defined</div>';
+    return;
+  }
+  const opts = batchState.samples.map(s =>
+    `<option value="${s.id}">${s.name}</option>`).join('');
+
+  el.innerHTML = `
+    <table class="pairs-table">
+      <thead><tr><th>Moving</th><th>Fixed</th><th></th></tr></thead>
+      <tbody>
+        ${batchState.pairs.map(p => `
+          <tr>
+            <td><select onchange="updatePair(${p.id},'movingId',this.value)">
+              ${batchState.samples.map(s =>
+                `<option value="${s.id}" ${s.id===p.movingId?'selected':''}>${s.name}</option>`
+              ).join('')}
+            </select></td>
+            <td><select onchange="updatePair(${p.id},'fixedId',this.value)">
+              ${batchState.samples.map(s =>
+                `<option value="${s.id}" ${s.id===p.fixedId?'selected':''}>${s.name}</option>`
+              ).join('')}
+            </select></td>
+            <td><button class="del-btn" onclick="removePair(${p.id})">×</button></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function updateBatchUI() {
+  const n = batchState.pairs.length;
+  const btn = document.getElementById('btn-run-batch');
+  btn.disabled = n === 0;
+  btn.textContent = n ? `▶ Run Batch (${n} pair${n > 1 ? 's' : ''})` : '▶ Run Batch';
+
+  const badge = document.getElementById('batch-badge');
+  if (n > 0) {
+    badge.textContent = n;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+
+  const info = document.getElementById('batch-info');
+  if (batchState.folder && n > 0) {
+    info.style.display = '';
+    document.getElementById('batch-out-path').textContent =
+      `${batchState.folder}/results/{moving}_to_{fixed}/`;
+  } else {
+    info.style.display = 'none';
+  }
+}
+
+function runBatch() {
+  const n = batchState.pairs.length;
+  if (!n) return;
+  const folder = batchState.folder || 'output';
+  const jobs = batchState.pairs.map(p => {
+    const mov = batchState.samples.find(s => s.id === p.movingId);
+    const fix = batchState.samples.find(s => s.id === p.fixedId);
+    return {
+      moving: mov?.path,
+      fixed:  fix?.path,
+      output: `${folder}/results/${mov?.name}_to_${fix?.name}/`,
+    };
+  });
+  console.log('Batch jobs:', jobs);
+  toast(`▶ Batch queued: ${n} pair${n>1?'s':''} → ${folder}/results/ (stub)`);
+}
+
+// ═══════════════════════════════════════════════════════
+//  Node definitions
+// ═══════════════════════════════════════════════════════
+const NODE_DEFS = {
+  load_tiff: {
+    icon: '📁', title: 'Load TIFF Series',
+    inputs: 0, outputs: 1,
+    defaultData: { source: 'manual', batchRole: 'moving', pattern: 'data/*.tif', scale: 1, ratio: 1.0 },
+    summary: d => d.source === 'batch'
+      ? `batch: ${d.batchRole || 'moving'}`
+      : `${d.pattern || '—'} (×${d.scale})`,
+    settings: renderLoadTiffSettings,
+  },
+  load_nii: {
+    icon: '📂', title: 'Load NIfTI',
+    inputs: 0, outputs: 1,
+    defaultData: { source: 'manual', batchRole: 'moving', path: '', scale: 1 },
+    summary: d => d.source === 'batch'
+      ? `batch: ${d.batchRole || 'moving'}`
+      : (d.path ? d.path.split('/').pop() : '—'),
+    settings: renderLoadNiiSettings,
+  },
+  filter: {
+    icon: '🔬', title: 'Filter',
+    inputs: 1, outputs: 1,
+    defaultData: { type: 'LoG' },
+    summary: () => 'coming soon',
+    settings: renderFilterSettings,
+  },
+  register: {
+    icon: '🧠', title: 'Register',
+    inputs: 2, outputs: 2,
+    defaultData: { ...wizardData },
+    summary: d => `${d.optimizer || 'SA'} · ${d.similarity || 'corr'}`,
+    settings: renderRegisterSettings,
+  },
+  save: {
+    icon: '💾', title: 'Save',
+    inputs: 1, outputs: 0,
+    defaultData: { outputMode: 'manual', path: 'output/result.nii.gz' },
+    summary: d => d.outputMode === 'batch' ? 'batch subfolders' : (d.path || '—'),
+    settings: renderSaveSettings,
+  },
+  view: {
+    icon: '👁', title: 'View (3D)',
+    inputs: 1, outputs: 0,
+    defaultData: {},
+    summary: () => 'NiiVue (coming soon)',
+    settings: renderViewSettings,
+  },
+};
+
+// ═══════════════════════════════════════════════════════
+//  Init Drawflow
+// ═══════════════════════════════════════════════════════
+function initDrawflow() {
+  const container = document.getElementById('drawflow');
+  editor = new Drawflow(container);
+  editor.reroute = true;
+  editor.reroute_fix_curvature = true;
+  editor.start();
+
+  editor.on('nodeSelected', id => {
+    selectedNodeId = id;
+    const node = editor.getNodeFromId(id);
+    if (node) renderSettings(node.name, node.data, id);
+  });
+
+  editor.on('nodeUnselected', () => {
+    selectedNodeId = null;
+    document.getElementById('settings-content').innerHTML =
+      '<div class="placeholder">Select a node to configure it</div>';
+  });
+
+  editor.on('nodeRemoved', () => updateHint());
+  editor.on('nodeCreated', () => updateHint());
+}
+
+// ═══════════════════════════════════════════════════════
+//  Node HTML template
+// ═══════════════════════════════════════════════════════
+function nodeHtml(type, data) {
+  const def = NODE_DEFS[type];
+  const summary = def.summary(data);
+  const isRegister = type === 'register';
+  const isFilter   = type === 'filter';
+  return `
+    <div class="node-card">
+      <div class="node-header">
+        <span class="node-icon">${def.icon}</span>
+        <span class="node-title">${def.title}</span>
+        <span class="node-status" id="ns-STATUS">idle</span>
+        <button class="node-del" onclick="removeNode(event)" title="Remove node">×</button>
+      </div>
+      <div class="node-body" id="ns-BODY">${summary}</div>
+      <div class="node-actions">
+        ${isRegister
+          ? `<button class="node-btn" onclick="openWizard(event)">⚙ Configure</button>
+             <button class="node-btn run-btn" onclick="runNode(event)">▶ Run</button>`
+          : isFilter
+          ? `<button class="node-btn" style="color:var(--text-dim)" disabled>⚙ Coming soon</button>`
+          : `<button class="node-btn" onclick="selectThisNode(event)">⚙ Settings</button>`
+        }
+      </div>
+    </div>`;
+}
+
+function addNode(type, x, y) {
+  const def = NODE_DEFS[type];
+  if (!def) return;
+  const data = JSON.parse(JSON.stringify(def.defaultData));
+  const html = nodeHtml(type, data);
+  editor.addNode(type, def.inputs, def.outputs, x, y, `node-${type}`, data, html);
+  updateHint();
+}
+
+// ═══════════════════════════════════════════════════════
+//  Drag & drop from palette
+// ═══════════════════════════════════════════════════════
+let dragNodeType = null;
+
+document.querySelectorAll('.palette-item').forEach(el => {
+  el.addEventListener('dragstart', e => {
+    dragNodeType = el.dataset.node;
+    e.dataTransfer.effectAllowed = 'copy';
+  });
+});
+
+document.getElementById('drawflow').addEventListener('dragover', e => {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+});
+
+document.getElementById('drawflow').addEventListener('drop', e => {
+  e.preventDefault();
+  if (!dragNodeType) return;
+  const rect = document.getElementById('drawflow').getBoundingClientRect();
+  const x = (e.clientX - rect.left  - editor.canvas_x) / editor.zoom;
+  const y = (e.clientY - rect.top   - editor.canvas_y) / editor.zoom;
+  addNode(dragNodeType, x, y);
+  dragNodeType = null;
+});
+
+// ═══════════════════════════════════════════════════════
+//  Settings panel renderers
+// ═══════════════════════════════════════════════════════
+function renderSettings(type, data, nodeId) {
+  const def = NODE_DEFS[type];
+  if (!def) return;
+  const el = document.getElementById('settings-content');
+  el.innerHTML = `<div style="margin-bottom:10px;font-size:13px;font-weight:600;color:var(--text)">
+    ${def.icon} ${def.title}</div>` + def.settings(data, nodeId);
+}
+
+function _sourceToggle(d, id, type) {
+  const hasSamples = batchState.samples.length > 0;
+  if (!hasSamples) return '';
+  return `
+    <div class="form-group">
+      <label>Source</label>
+      <select onchange="updateNodeData(${id},'source',this.value);renderSettings('${type}',editor.getNodeFromId(${id}).data,${id})">
+        <option value="manual" ${(d.source||'manual')==='manual'?'selected':''}>Manual path</option>
+        <option value="batch"  ${d.source==='batch'?'selected':''}>From batch table</option>
+      </select>
+    </div>`;
+}
+
+function renderLoadTiffSettings(d, id) {
+  const isBatch = d.source === 'batch' && batchState.samples.length > 0;
+  return _sourceToggle(d, id, 'load_tiff') + (isBatch ? `
+    <div class="form-group">
+      <label>Batch column</label>
+      <select onchange="updateNodeData(${id},'batchRole',this.value)">
+        <option value="moving" ${(d.batchRole||'moving')==='moving'?'selected':''}>Moving (col 1)</option>
+        <option value="fixed"  ${d.batchRole==='fixed'?'selected':''}>Fixed (col 2)</option>
+      </select>
+    </div>` : `
+    <div class="form-group">
+      <label>File pattern (glob)</label>
+      <input type="text" value="${d.pattern||''}"
+             oninput="updateNodeData(${id},'pattern',this.value)">
+    </div>`) + `
+    <div class="form-group">
+      <label>Scale (XY downsample)</label>
+      <input type="number" min="1" max="16" value="${d.scale||1}"
+             oninput="updateNodeData(${id},'scale',+this.value)">
+    </div>
+    <div class="form-group">
+      <label>Ratio (XY/Z resolution)</label>
+      <input type="number" min="0.01" step="0.25" value="${d.ratio||1.0}"
+             oninput="updateNodeData(${id},'ratio',+this.value)">
+    </div>`;
+}
+
+function renderLoadNiiSettings(d, id) {
+  const isBatch = d.source === 'batch' && batchState.samples.length > 0;
+  return _sourceToggle(d, id, 'load_nii') + (isBatch ? `
+    <div class="form-group">
+      <label>Batch column</label>
+      <select onchange="updateNodeData(${id},'batchRole',this.value)">
+        <option value="moving" ${(d.batchRole||'moving')==='moving'?'selected':''}>Moving (col 1)</option>
+        <option value="fixed"  ${d.batchRole==='fixed'?'selected':''}>Fixed (col 2)</option>
+      </select>
+    </div>` : `
+    <div class="form-group">
+      <label>File path (.nii / .nii.gz)</label>
+      <input type="text" value="${d.path||''}" placeholder="/data/brain.nii.gz"
+             oninput="updateNodeData(${id},'path',this.value)">
+    </div>`) + `
+    <div class="form-group">
+      <label>Scale (downsample, 1 = full res)</label>
+      <input type="number" min="1" max="16" value="${d.scale||1}"
+             oninput="updateNodeData(${id},'scale',+this.value)">
+    </div>`;
+}
+
+function renderFilterSettings(d, id) {
+  return `<div style="text-align:center;padding:20px;color:var(--text-dim)">
+    🔬<br><br>Filter nodes are not yet implemented.<br>
+    <span style="font-size:11px">LoG, Gaussian, Median — coming soon</span></div>`;
+}
+
+function renderRegisterSettings(d, id) {
+  return `<button class="btn primary" style="width:100%"
+    onclick="openWizardForNode(${id})">⚙ Open Wizard</button>
+    <div style="margin-top:12px;font-size:12px;color:var(--text-dim)">
+      <div style="margin-bottom:4px"><b style="color:var(--text)">Optimizer:</b> ${d.optimizer||'SA'}</div>
+      <div style="margin-bottom:4px"><b style="color:var(--text)">Similarity:</b> ${d.similarity||'corr'}</div>
+      <div><b style="color:var(--text)">Stages:</b> ${(d.stages||[]).length}</div>
+    </div>`;
+}
+
+function renderSaveSettings(d, id) {
+  const hasPairs = batchState.pairs.length > 0;
+  const isBatch  = d.outputMode === 'batch' && hasPairs;
+  return (hasPairs ? `
+    <div class="form-group">
+      <label>Output mode</label>
+      <select onchange="updateNodeData(${id},'outputMode',this.value);renderSettings('save',editor.getNodeFromId(${id}).data,${id})">
+        <option value="manual" ${(d.outputMode||'manual')==='manual'?'selected':''}>Manual path</option>
+        <option value="batch"  ${d.outputMode==='batch'?'selected':''}>Batch subfolders</option>
+      </select>
+    </div>` : '') + (isBatch ? `
+    <div class="batch-info">
+      Saves to:<br>
+      <code>${batchState.folder||'{folder}'}/results/{moving}_to_{fixed}/warped.nii.gz</code>
+    </div>` : `
+    <div class="form-group">
+      <label>Output path</label>
+      <input type="text" value="${d.path||''}" placeholder="output/result.nii.gz"
+             oninput="updateNodeData(${id},'path',this.value)">
+    </div>`) + `
+    <button class="btn" style="width:100%;margin-top:4px"
+            onclick="stubSave()">💾 Save (stub)</button>`;
+}
+
+function renderViewSettings(d, id) {
+  return `<div style="text-align:center;padding:20px;color:var(--text-dim)">
+    👁<br><br>NiiVue 3D viewer will appear here.<br>
+    <span style="font-size:11px">WebGL volume rendering — coming soon</span></div>`;
+}
+
+function updateNodeData(id, key, value) {
+  const node = editor.getNodeFromId(id);
+  if (!node) return;
+  node.data[key] = value;
+  editor.updateNodeDataFromId(id, node.data);
+  const def = NODE_DEFS[node.name];
+  if (def) {
+    const body = document.querySelector(`#node-${id} .node-body`);
+    if (body) body.textContent = def.summary(node.data);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  Node button handlers
+// ═══════════════════════════════════════════════════════
+function openWizard(e) {
+  e.stopPropagation();
+  const nodeEl = e.target.closest('.drawflow-node');
+  if (!nodeEl) return;
+  openWizardForNode(+nodeEl.id.replace('node-', ''));
+}
+
+function openWizardForNode(id) {
+  wizardNodeId = id;
+  const node = editor.getNodeFromId(id);
+  if (node?.data) Object.assign(wizardData, node.data);
+  wizardStep = 0;
+  renderWizardStep();
+  document.getElementById('wizard-overlay').classList.add('open');
+}
+
+function closeWizard() {
+  document.getElementById('wizard-overlay').classList.remove('open');
+}
+
+function selectThisNode(e) {
+  e.stopPropagation();
+  const nodeEl = e.target.closest('.drawflow-node');
+  if (!nodeEl) return;
+  const id = +nodeEl.id.replace('node-', '');
+  const node = editor.getNodeFromId(id);
+  if (node) renderSettings(node.name, node.data, id);
+}
+
+function removeNode(e) {
+  e.stopPropagation();
+  const nodeEl = e.target.closest('.drawflow-node');
+  if (!nodeEl) return;
+  editor.removeNodeId(nodeEl.id);
+}
+
+function runNode(e) {
+  e.stopPropagation();
+  toast('▶ Running… (stub — FastAPI not connected yet)');
+}
+
+function stubSave() {
+  toast('💾 Saved to output/result.nii.gz (stub)');
+}
+
+// ═══════════════════════════════════════════════════════
+//  Wizard
+// ═══════════════════════════════════════════════════════
+function renderWizardStep() {
+  document.querySelectorAll('.wizard-step').forEach((el, i) => {
+    el.className = 'wizard-step' +
+      (i < wizardStep ? ' done' : i === wizardStep ? ' active' : '');
+  });
+  const back = document.getElementById('wizard-back');
+  const next = document.getElementById('wizard-next');
+  back.style.visibility = wizardStep === 0 ? 'hidden' : 'visible';
+  next.textContent = wizardStep === 2 ? '✓ Apply' : 'Next →';
+
+  const body = document.getElementById('wizard-body');
+
+  if (wizardStep === 0) {
+    body.innerHTML = `
+      <div class="optimizer-cards">
+        ${[
+          { id:'SA',       icon:'🌡',  name:'Simulated Annealing', desc:'Any metric, global search' },
+          { id:'Gradient', icon:'∇',   name:'Gradient (Adam)',     desc:'Differentiable, fast' },
+          { id:'Hybrid',   icon:'⚡',  name:'Hybrid SA+GD',        desc:'SA explore → GD refine' },
+        ].map(o => `
+          <div class="opt-card ${wizardData.optimizer===o.id?'selected':''}"
+               onclick="selectOptimizer('${o.id}')">
+            <div class="opt-icon">${o.icon}</div>
+            <div class="opt-name">${o.name}</div>
+            <div class="opt-desc">${o.desc}</div>
+          </div>`).join('')}
+      </div>
+      <div class="params-grid">
+        <div class="form-group">
+          <label>Temp start</label>
+          <input type="text" value="${wizardData.temp_start}"
+                 oninput="wizardData.temp_start=this.value">
+        </div>
+        <div class="form-group">
+          <label>Temp end</label>
+          <input type="text" value="${wizardData.temp_end}"
+                 oninput="wizardData.temp_end=this.value">
+        </div>
+        <div class="form-group">
+          <label>Coeff start</label>
+          <input type="text" value="${wizardData.coeff_start}"
+                 oninput="wizardData.coeff_start=this.value">
+        </div>
+      </div>`;
+  }
+  else if (wizardStep === 1) {
+    body.innerHTML = `
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px">
+        Coarse-to-fine stages. Each stage refines the previous grid.
+      </p>
+      <table class="stages-table">
+        <thead><tr>
+          <th>Grid (ny,nx,nz)</th><th>Steps</th><th>λ (lam)</th><th>Scale</th>
+        </tr></thead>
+        <tbody>
+          ${wizardData.stages.map((s,i) => `
+          <tr>
+            <td><input value="${s.grid}" oninput="wizardData.stages[${i}].grid=this.value"></td>
+            <td><input type="number" value="${s.steps}" oninput="wizardData.stages[${i}].steps=+this.value"></td>
+            <td><input value="${s.lam}" oninput="wizardData.stages[${i}].lam=this.value"></td>
+            <td><input type="number" value="${s.scale}" oninput="wizardData.stages[${i}].scale=+this.value"></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <div style="margin-top:8px;display:flex;gap:6px">
+        <button class="btn" style="font-size:11px" onclick="addStage()">+ Stage</button>
+        <button class="btn" style="font-size:11px" onclick="removeLastStage()">– Stage</button>
+      </div>`;
+  }
+  else if (wizardStep === 2) {
+    body.innerHTML = `
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:14px">
+        Choose similarity metric, then apply.
+      </p>
+      <div class="form-group" style="margin-bottom:16px">
+        <label>Similarity metric</label>
+        <div class="sim-group">
+          ${['corr','ncc','mse'].map(s => `
+            <div class="sim-btn ${wizardData.similarity===s?'selected':''}"
+                 onclick="selectSimilarity('${s}')">${s.toUpperCase()}</div>`).join('')}
+        </div>
+      </div>
+      <div class="summary-grid">
+        <div class="summary-item">
+          <div class="s-label">Optimizer</div>
+          <div class="s-value">${wizardData.optimizer}</div>
+        </div>
+        <div class="summary-item">
+          <div class="s-label">Similarity</div>
+          <div class="s-value">${wizardData.similarity}</div>
+        </div>
+        <div class="summary-item">
+          <div class="s-label">Stages</div>
+          <div class="s-value">${wizardData.stages.length}</div>
+        </div>
+        <div class="summary-item">
+          <div class="s-label">Temp range</div>
+          <div class="s-value" style="font-size:11px">${wizardData.temp_start} → ${wizardData.temp_end}</div>
+        </div>
+      </div>`;
+  }
+}
+
+function selectOptimizer(id) { wizardData.optimizer = id; renderWizardStep(); }
+function selectSimilarity(s)  { wizardData.similarity = s; renderWizardStep(); }
+function addStage() {
+  wizardData.stages.push({ grid:'9,9,9', steps:2000, lam:'1e-3', scale:1 });
+  renderWizardStep();
+}
+function removeLastStage() {
+  if (wizardData.stages.length > 1) { wizardData.stages.pop(); renderWizardStep(); }
+}
+
+function wizardNext() {
+  if (wizardStep < 2) { wizardStep++; renderWizardStep(); }
+  else {
+    if (wizardNodeId !== null) {
+      editor.updateNodeDataFromId(wizardNodeId, { ...wizardData });
+      const body = document.querySelector(`#node-${wizardNodeId} .node-body`);
+      if (body) body.textContent = NODE_DEFS['register'].summary(wizardData);
+      renderSettings('register', wizardData, wizardNodeId);
+    }
+    closeWizard();
+    toast('✓ Registration node configured');
+  }
+}
+function wizardBack() {
+  if (wizardStep > 0) { wizardStep--; renderWizardStep(); }
+}
+
+// ═══════════════════════════════════════════════════════
+//  Sessions
+// ═══════════════════════════════════════════════════════
+const DEFAULT_SESSIONS = [
+  { id: 's1', name: 'Brain P7 → P14',  date: 'May 18', status: 'done', flow: null },
+  { id: 's2', name: 'Brain P14 → P21', date: 'May 19', status: 'done', flow: null },
+  { id: 's3', name: 'Test run',         date: 'May 20', status: 'idle', flow: null },
+];
+
+function loadSessions()        { const r = localStorage.getItem('bm_sessions'); return r ? JSON.parse(r) : DEFAULT_SESSIONS; }
+function saveSessions(sessions){ localStorage.setItem('bm_sessions', JSON.stringify(sessions)); }
+
+function renderSessionList() {
+  const sessions = loadSessions();
+  document.getElementById('sessions-list').innerHTML = sessions.map(s => `
+    <li onclick="loadSession('${s.id}')" class="${currentSession===s.id?'active':''}">
+      <span class="dot ${s.status}"></span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis">${s.name}</span>
+      <span class="session-date">${s.date}</span>
+    </li>`).join('');
+}
+
+function loadSession(id) {
+  currentSession = id;
+  const s = loadSessions().find(x => x.id === id);
+  if (!s) return;
+  document.getElementById('session-name-display').textContent = s.name;
+  if (s.flow) editor.import(s.flow); else clearCanvas();
+  renderSessionList();
+}
+
+function newSession() {
+  const name = prompt('Session name:', `Session ${new Date().toLocaleDateString()}`);
+  if (!name) return;
+  const sessions = loadSessions();
+  const id = 's' + Date.now();
+  sessions.unshift({ id, name, date: 'Today', status: 'idle', flow: null });
+  saveSessions(sessions);
+  currentSession = id;
+  document.getElementById('session-name-display').textContent = name;
+  clearCanvas();
+  renderSessionList();
+}
+
+function saveCurrentSession() {
+  if (!currentSession) {
+    const name = prompt('Save as:', 'New session');
+    if (!name) return;
+    const sessions = loadSessions();
+    const id = 's' + Date.now();
+    sessions.unshift({ id, name, date: 'Today', status: 'idle', flow: null });
+    currentSession = id;
+    document.getElementById('session-name-display').textContent = name;
+    saveSessions(sessions);
+  }
+  const sessions = loadSessions();
+  const s = sessions.find(x => x.id === currentSession);
+  if (s) {
+    s.flow = editor.export();
+    s.date = 'Today';
+    saveSessions(sessions);
+    renderSessionList();
+    toast('💾 Session saved');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  Protocols
+// ═══════════════════════════════════════════════════════
+const BUILTIN_PROTOCOLS = [
+  { id: 'standard_nii',        icon: '📋', name: 'Standard NIfTI',          builtin: true },
+  { id: 'standard_tiff',       icon: '📋', name: 'Standard TIFF',           builtin: true },
+  { id: 'tiff_filter_register',icon: '📋', name: 'TIFF → Filter → Register',builtin: true },
+  { id: 'batch_nii',           icon: '📦', name: 'Batch NIfTI',             builtin: true },
+];
+
+function loadProtocolList() {
+  const saved = JSON.parse(localStorage.getItem('bm_protocols') || '[]');
+  return [...BUILTIN_PROTOCOLS, ...saved];
+}
+
+function saveProtocolList(list) {
+  localStorage.setItem('bm_protocols', JSON.stringify(list.filter(p => !p.builtin)));
+}
+
+function renderProtocolList() {
+  const list = loadProtocolList();
+  document.getElementById('protocol-list').innerHTML = list.map(p => `
+    <li>
+      <span style="flex:1" onclick="loadProtocol('${p.id}')">${p.icon} ${p.name}</span>
+      ${!p.builtin
+        ? `<button class="p-del" onclick="deleteProtocol('${p.id}');event.stopPropagation()" title="Delete">×</button>`
+        : ''}
+    </li>`).join('');
+}
+
+function deleteProtocol(id) {
+  const list = loadProtocolList().filter(p => p.id !== id);
+  saveProtocolList(list);
+  renderProtocolList();
+  toast('Protocol deleted');
+}
+
+function saveAsProtocol() {
+  const name = prompt('Protocol name:', 'My protocol');
+  if (!name) return;
+  const id = 'custom_' + Date.now();
+  const flow = editor.export();
+  const list = loadProtocolList();
+  list.push({ id, icon: '⚙', name, builtin: false, flow });
+  saveProtocolList(list);
+  renderProtocolList();
+  toast(`✓ Protocol "${name}" saved`);
+}
+
+function loadProtocol(id) {
+  // Check user-saved protocols first
+  const saved = JSON.parse(localStorage.getItem('bm_protocols') || '[]');
+  const custom = saved.find(p => p.id === id);
+  if (custom?.flow) {
+    clearCanvas();
+    editor.import(custom.flow);
+    toast(`📋 "${custom.name}" loaded`);
+    return;
+  }
+
+  // Built-in protocols
+  clearCanvas();
+  if (id === 'standard_nii') {
+    addNode('load_nii',  80, 150);
+    addNode('load_nii',  80, 320);
+    addNode('register', 320, 220);
+    addNode('save',     560, 220);
+    toast('📋 Standard NIfTI protocol loaded');
+  } else if (id === 'standard_tiff') {
+    addNode('load_tiff',  80, 150);
+    addNode('load_tiff',  80, 320);
+    addNode('register',  320, 220);
+    addNode('save',      560, 220);
+    toast('📋 Standard TIFF protocol loaded');
+  } else if (id === 'tiff_filter_register') {
+    addNode('load_tiff',   80, 150);
+    addNode('load_tiff',   80, 320);
+    addNode('filter',     300, 150);
+    addNode('filter',     300, 320);
+    addNode('register',   520, 220);
+    addNode('save',       740, 220);
+    toast('📋 TIFF → Filter → Register loaded');
+  } else if (id === 'batch_nii') {
+    addNode('load_nii',  80, 150);
+    addNode('load_nii',  80, 320);
+    addNode('register', 320, 220);
+    addNode('save',     560, 220);
+    const nodes = Object.values(editor.drawflow.drawflow.Home.data);
+    nodes.filter(n => n.name === 'load_nii').forEach((n, i) => {
+      n.data.source = 'batch';
+      n.data.batchRole = i === 0 ? 'moving' : 'fixed';
+      editor.updateNodeDataFromId(n.id, n.data);
+    });
+    nodes.filter(n => n.name === 'save').forEach(n => {
+      n.data.outputMode = 'batch';
+      editor.updateNodeDataFromId(n.id, n.data);
+    });
+    toast('📦 Batch NIfTI protocol loaded — set folder in Batch panel');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  Misc
+// ═══════════════════════════════════════════════════════
+function clearCanvas() { editor.clear(); updateHint(); }
+function zoomReset()   { editor.zoom_reset(); }
+
+function updateHint() {
+  const hasNodes = Object.keys(editor.drawflow.drawflow.Home.data).length > 0;
+  document.getElementById('canvas-hint').style.opacity = hasNodes ? '0' : '1';
+}
+
+function toggleSection(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+document.getElementById('btn-toggle-sidebar').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('collapsed');
+  document.getElementById('layout').style.gridTemplateColumns =
+    document.getElementById('sidebar').classList.contains('collapsed')
+      ? '0 1fr var(--palette-w)'
+      : 'var(--sidebar-w) 1fr var(--palette-w)';
+});
+
+document.getElementById('btn-new').addEventListener('click', newSession);
+document.getElementById('btn-save').addEventListener('click', saveCurrentSession);
+document.getElementById('btn-run').addEventListener('click', () => {
+  const n = batchState.pairs.length;
+  if (n > 0) {
+    runBatch();
+  } else {
+    toast('▶ Pipeline run started… (stub — FastAPI not connected yet)');
+  }
+});
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+// ═══════════════════════════════════════════════════════
+//  Boot
+// ═══════════════════════════════════════════════════════
+
+// Delete / Backspace removes the selected node
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+  // Don't fire when typing in an input/textarea
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (selectedNodeId !== null) {
+    editor.removeNodeId('node-' + selectedNodeId);
+    selectedNodeId = null;
+  }
+});
+
+// Fallback folder picker (Firefox / Safari / old Chrome)
+document.getElementById('folder-input').addEventListener('change', function () {
+  const files = Array.from(this.files);
+  if (!files.length) return;
+  const folderName = files[0].webkitRelativePath.split('/')[0];
+  _applyFolderFiles(folderName, files);
+  this.value = '';
+});
+
+initDrawflow();
+renderSessionList();
+renderProtocolList();
+</script>
+</body>
+</html>

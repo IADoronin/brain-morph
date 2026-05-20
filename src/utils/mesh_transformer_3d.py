@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import mask_3d
 from mesh_transform_3d import get_basis_3d, get_bilinear_transform_3d, iter_grid_cells_3d
+from compute_tension_3d import compute_tension_3d
 
 
 class MeshTransformer3D:
@@ -137,6 +138,64 @@ class MeshTransformer3D:
             align_corners=True,
             padding_mode="zeros",
         ).squeeze(0)
+
+    def _compute_cell_weights(self, mask: torch.Tensor) -> torch.Tensor:
+        """Fraction of valid voxels per cell derived from a binary mask.
+
+        Args:
+            mask: Boolean (or float) tensor of shape ``(D, H, W)``.  A value of
+                ``True`` / ``1`` marks tissue; ``False`` / ``0`` marks empty space.
+
+        Returns:
+            Float tensor of shape ``(ny-1, nx-1, nz-1)`` with values in
+            ``[0, 1]``.  A cell fully covered by tissue gets weight ``1.0``; a
+            cell over empty space gets ``0.0``.
+        """
+        mask_flat = mask.flatten().to(dtype=torch.float32,
+                                       device=self._cell_index_map.device)
+        ny, nx, nz = [s - 1 for s in self.grid_init.shape[:3]]
+        n_cells = ny * nx * nz
+
+        cell_sums = torch.zeros(n_cells, device=mask_flat.device)
+        cell_sums.scatter_add_(0, self._cell_index_map, mask_flat)
+        cell_counts = torch.bincount(self._cell_index_map, minlength=n_cells).float()
+        return (cell_sums / cell_counts.clamp_min(1)).reshape(ny, nx, nz)
+
+    def tension(
+        self,
+        grid_target: torch.Tensor,
+        grid_ref: torch.Tensor | None = None,
+        mode: str = "abs",
+        voxel_size: tuple[float, ...] | None = None,
+        mask: torch.Tensor | None = None,
+        metric=None,
+    ) -> torch.Tensor:
+        """Deformation energy between ``grid_target`` and a reference grid.
+
+        Args:
+            grid_target: Deformed control-point grid, shape ``(ny, nx, nz, 3)``.
+            grid_ref: Reference grid for energy computation.  ``None`` uses
+                ``self.grid_init`` (typical case).  Pass the previous iteration's
+                grid for step-wise regularisation in sequential registrations.
+            mode: ``"abs"`` (MATLAB-compatible) or ``"squared"`` (smooth
+                gradient for autograd-based optimisers).
+            voxel_size: Physical voxel size in µm for isotropic weighting.
+            mask: Binary mask ``(D, H, W)`` of valid tissue.  Cells over empty
+                regions (e.g. detached olfactory bulb) receive weight ``0`` and
+                do not contribute to the penalty.
+
+        Returns:
+            Scalar tension tensor.
+        """
+        ref = grid_ref if grid_ref is not None else self.grid_init
+        weights = self._compute_cell_weights(mask) if mask is not None else None
+        return compute_tension_3d(
+            grid_target, ref,
+            mode=mode,
+            voxel_size=voxel_size,
+            cell_weights=weights,
+            metric=metric,
+        )
 
 
 def mesh_transform_3d(

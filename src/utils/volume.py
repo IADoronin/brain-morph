@@ -6,11 +6,27 @@ import cv2 as cv
 import matplotlib.pyplot as plt
 import warnings
 import typing
+import math
+import os
 import torch.nn.functional as F
 try:
     import nibabel as nib
 except Exception:
     nib = None
+
+
+def _free_memory_gb() -> float:
+    """Available system RAM in GB, or inf if cannot be determined."""
+    try:
+        import psutil
+        return psutil.virtual_memory().available / 1e9
+    except ImportError:
+        pass
+    try:
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_AVPHYS_PAGES") / 1e9
+    except (AttributeError, ValueError):
+        return float("inf")
+
 
 #Что сделать: добавить разрешение в мкм по разным осям, что актуально для конфокальной микроскопии
 class Volume(torch.Tensor):
@@ -93,38 +109,198 @@ class Volume(torch.Tensor):
         normalized_data = (self - min_val) / (max_val - min_val)
         return Volume(normalized_data, affine=self.affine)
     
-    @classmethod
-    def load_tiff_series(cls,file_names_mask):
-        pass
-    @classmethod
-    def load_nii(cls, file_path: str):
-        """
-        Load a NIfTI (.nii or .nii.gz) file and return a `Volume`.
+    def save_nii(self, file_path: str) -> None:
+        """Save volume to a NIfTI file.
 
-        Returns a `Volume` with shape (C, D, H, W) where C is channels (1 for typical
-        single-volume NIfTIs). Affine matrix (if present) is stored in `Volume.affine`.
+        Accepts shapes ``(C, D, H, W)`` or ``(D, H, W)``.  Single-channel
+        volumes are saved as 3-D ``(D, H, W)``; multi-channel as 4-D
+        ``(D, H, W, C)`` following the NIfTI convention.
+        """
+        if nib is None:
+            raise ImportError("nibabel is required. Install with `pip install nibabel`.")
+        data = self.detach().cpu().float().numpy()
+        if data.ndim == 4:
+            # (C, D, H, W) → (D, H, W, C)
+            data = data.transpose(1, 2, 3, 0)
+            if data.shape[-1] == 1:
+                data = data[..., 0]   # drop trivial channel dim
+        affine = self.affine.numpy() if isinstance(self.affine, torch.Tensor) else self.affine
+        nib.save(nib.Nifti1Image(data, affine), file_path)
+
+    @classmethod
+    def load_tiff_series(
+        cls,
+        file_names_mask: str,
+        scale: int = 1,
+        ratio: float = 1.0,
+        max_gb: float | None = None,
+    ) -> 'Volume':
+        """Load a 3D volume from a series of per-slice TIFF files.
+
+        Mirrors MATLAB ``mload(FNAMEFMT, DECREASE, RATIO)``.
+
+        Files are matched by glob and sorted by the integer embedded in each
+        filename (negative numbers supported, e.g. ``-3``, ``0``, ``2``).
+        Each file becomes one input slice along D.
+
+        Args:
+            file_names_mask: Glob pattern, e.g. ``'data/s_C001Z*.tif'``.
+            scale: XY downsampling factor (DECREASE in MATLAB).
+                scale=4 → H//4, W//4 per slice.
+            ratio: XY-to-Z resolution ratio (RATIO in MATLAB).
+                ``z_step = scale / ratio`` slices are skipped between output
+                slices.  ratio=1 (default) → z_step=scale (isotropic after
+                downsampling).  When z_step is non-integer, adjacent slices
+                are linearly blended, matching the MATLAB behaviour.
+            max_gb: RAM budget in GB for the memory warning
+                (None = 70 % of free RAM).  No automatic downsampling —
+                a warning with a recommended scale is printed instead.
+
+        Returns:
+            ``Volume (C, D_out, H//scale, W//scale)`` where
+            ``D_out = ceil(n_files / z_step)``.
+        """
+        import glob
+        import re
+
+        if scale < 1:
+            raise ValueError(f"scale must be >= 1, got {scale}")
+        if ratio <= 0:
+            raise ValueError(f"ratio must be > 0, got {ratio}")
+
+        paths = glob.glob(file_names_mask)
+        if not paths:
+            raise FileNotFoundError(f"No files matched: {file_names_mask}")
+
+        def _num(p: str) -> int:
+            stem = os.path.splitext(os.path.basename(p))[0]
+            nums = re.findall(r'-?\d+', stem)
+            if not nums:
+                raise ValueError(f"No integer found in filename: {p}")
+            return int(nums[-1])
+
+        paths = sorted(paths, key=_num)
+        n_files = len(paths)
+
+        # Probe first slice: shape, channel count
+        probe = cv.imread(paths[0], cv.IMREAD_UNCHANGED)
+        if probe is None:
+            raise IOError(f"Cannot read: {paths[0]}")
+        h, w = probe.shape[:2]
+        n_ch = 1 if probe.ndim == 2 else probe.shape[2]
+
+        z_step = scale / ratio
+        d_out = math.ceil(n_files / z_step)
+        dh, dw = max(1, h // scale), max(1, w // scale)
+
+        needed_gb = d_out * dh * dw * n_ch * 4 / 1e9  # float32
+
+        if max_gb is None:
+            free = _free_memory_gb()
+            max_gb = free * 0.7 if free != float("inf") else float("inf")
+
+        if scale == 1 and max_gb > 0 and needed_gb > max_gb:
+            rec = math.ceil((needed_gb / max_gb) ** 0.5)
+            warnings.warn(
+                f"Volume requires ~{needed_gb:.2f} GB but only {max_gb:.2f} GB "
+                f"are available. Consider loading with scale={rec} "
+                f"(~{needed_gb / rec ** 2:.2f} GB): "
+                f"Volume.load_tiff_series('{file_names_mask}', scale={rec})",
+                ResourceWarning,
+                stacklevel=2,
+            )
+
+        def _read_slice(idx: float) -> np.ndarray:
+            """Read one input slice; linearly blend neighbours for float index."""
+            lo = int(math.floor(idx))
+            hi = int(math.ceil(idx))
+            if lo == hi or hi >= n_files:
+                img = cv.imread(paths[min(lo, n_files - 1)], cv.IMREAD_UNCHANGED)
+                if img is None:
+                    raise IOError(f"Cannot read: {paths[lo]}")
+                return img.astype(np.float32)
+            img_lo = cv.imread(paths[lo], cv.IMREAD_UNCHANGED)
+            img_hi = cv.imread(paths[hi], cv.IMREAD_UNCHANGED)
+            if img_lo is None or img_hi is None:
+                raise IOError(f"Cannot read slice {lo} or {hi}")
+            t = idx - lo  # weight of hi slice
+            return img_lo.astype(np.float32) * (1.0 - t) + img_hi.astype(np.float32) * t
+
+        slices: list[np.ndarray] = []
+        i = 0.0
+        while i < n_files:
+            sl = _read_slice(i)
+            if scale > 1:
+                sl = cv.resize(sl, (dw, dh), interpolation=cv.INTER_AREA)
+            slices.append(sl)
+            i += z_step
+
+        data = np.stack(slices, axis=0)  # (D, H, W) or (D, H, W, C)
+        if data.ndim == 3:
+            data = data[np.newaxis]          # → (1, D, H, W)
+        else:
+            data = np.moveaxis(data, -1, 0)  # → (C, D, H, W)
+
+        return cls(torch.as_tensor(data))
+    @classmethod
+    def load_nii(cls, file_path: str, scale: int = 1, max_gb: float | None = None):
+        """Load a NIfTI (.nii or .nii.gz) file and return a Volume (C, D, H, W).
+
+        Args:
+            file_path: Path to .nii or .nii.gz file.
+            scale: Integer downsampling stride applied along each spatial axis on
+                load (every scale-th voxel is kept). scale=1 loads at full
+                resolution. Use scale=2 to load 1/8 of voxels, scale=4 for 1/64.
+            max_gb: RAM budget in GB used only for the memory warning.
+                None = 70 % of current free RAM. When the estimated size exceeds
+                the budget and scale=1, a warning is printed with the recommended
+                scale value. No automatic downsampling is applied — you must pass
+                scale explicitly.
         """
         if nib is None:
             raise ImportError("nibabel is required to load NIfTI files. Install with `pip install nibabel`.")
+        if scale < 1:
+            raise ValueError(f"scale must be >= 1, got {scale}")
 
         img = nib.load(file_path)
-        data = img.get_fdata(dtype=np.float32)
+        shape = img.header.get_data_shape()
+
+        needed_gb = float(np.prod(shape)) * 4 / 1e9  # float32 size at full res
+
+        if max_gb is None:
+            free = _free_memory_gb()
+            max_gb = free * 0.7 if free != float("inf") else float("inf")
+
+        if scale == 1 and max_gb > 0 and needed_gb > max_gb:
+            recommended = math.ceil((needed_gb / max_gb) ** (1.0 / 3))
+            warnings.warn(
+                f"Volume requires ~{needed_gb:.2f} GB but only {max_gb:.2f} GB are available. "
+                f"Consider loading with scale={recommended} "
+                f"(~{needed_gb / recommended ** 3:.2f} GB): "
+                f"Volume.load_nii('{file_path}', scale={recommended})",
+                ResourceWarning,
+                stacklevel=2,
+            )
+
+        if scale > 1:
+            raw = np.asarray(
+                img.dataobj[::scale, ::scale, ::scale], dtype=np.float32
+            )
+            slope, inter = img.header.get_slope_inter()
+            if slope is not None:
+                raw = raw * float(slope) + float(inter or 0.0)
+            data = raw
+        else:
+            data = img.get_fdata(dtype=np.float32)
+
         affine = getattr(img, 'affine', None)
 
-        # Convert to (C, D, H, W)
         if data.ndim == 3:
-            # single-channel volume
             data = data[np.newaxis, ...]
         elif data.ndim == 4:
-            # treat last dim as channels/time
-            # reorder from (X, Y, Z, C) to (C, Z, Y, X) -> (C, D, H, W)
             data = np.moveaxis(data, -1, 0)
         else:
             raise ValueError(f"Unsupported NIfTI data dimensionality: {data.ndim}")
-
-        # Ensure ordering is (C, D, H, W)
-        # If spatial axes are (X,Y,Z) we treat them as (W,H,D) -> we want (C,D,H,W)
-        # Many neuroimaging tools use (X, Y, Z) as (W, H, D) already, so keep as-is.
 
         tensor = torch.as_tensor(data)
         return cls(tensor, affine=affine)
