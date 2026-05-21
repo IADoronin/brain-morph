@@ -6,6 +6,7 @@ from .volume import Volume
 from .mesh_transformer_3d import MeshTransformer3D
 from .tension_metrics import VolumeTension, BendingTension, TensionMetric
 from .compute_tension_3d import compute_tension_3d
+from .preprocess import log_filter, histogram_matching, preprocess
 
 __all__ = [
     "Volume",
@@ -14,4 +15,7 @@ __all__ = [
     "BendingTension",
     "TensionMetric",
     "compute_tension_3d",
+    "log_filter",
+    "histogram_matching",
+    "preprocess",
 ]

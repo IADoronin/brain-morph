@@ -197,6 +197,54 @@ class MeshTransformer3D:
             metric=metric,
         )
 
+    def transform_chunked(
+        self,
+        image: torch.Tensor,
+        grid: torch.Tensor,
+        chunk_size: int = 50,
+    ) -> torch.Tensor:
+        """Apply deformation to a full-resolution image in memory-efficient chunks.
+
+        Useful when the full sampling grid ``(D, H, W, 3)`` does not fit in RAM.
+        The coarse registration grid is upsampled to the full image resolution
+        once, then ``F.grid_sample`` is applied slice-by-slice along D.
+
+        Args:
+            image:      ``(C, D, H, W)`` full-resolution image.
+            grid:       ``(ny, nx, nz, 3)`` deformation grid from registration
+                        (may be at a coarser resolution than *image*).
+            chunk_size: Number of D-slices processed per iteration.
+
+        Returns:
+            ``(C, D, H, W)`` warped image, same dtype as *image*.
+        """
+        import gc
+        import torch.nn.functional as F
+
+        C, D, H, W = image.shape
+
+        # Upsample coarse grid to full image resolution: (ny,nx,nz,3) → (D,H,W,3)
+        g = grid.permute(3, 0, 1, 2).unsqueeze(0).float()   # (1, 3, ny, nx, nz)
+        g_full = F.interpolate(g, size=(D, H, W), mode="trilinear", align_corners=True)
+        g_full = g_full.squeeze(0).permute(1, 2, 3, 0)       # (D, H, W, 3)
+
+        result = torch.empty(C, D, H, W, dtype=image.dtype, device=image.device)
+
+        for d_start in range(0, D, chunk_size):
+            d_end = min(d_start + chunk_size, D)
+            grid_chunk = g_full[d_start:d_end].unsqueeze(0)          # (1, chunk, H, W, 3)
+            im_chunk = image[:, d_start:d_end].unsqueeze(0).float()  # (1, C, chunk, H, W)
+            with torch.no_grad():
+                warped = torch.nn.functional.grid_sample(
+                    im_chunk, grid_chunk,
+                    mode="bilinear", align_corners=True, padding_mode="border",
+                )
+            result[:, d_start:d_end] = warped.squeeze(0).to(image.dtype)
+            del warped, grid_chunk, im_chunk
+            gc.collect()
+
+        return result
+
 
 def mesh_transform_3d(
     image: torch.Tensor,

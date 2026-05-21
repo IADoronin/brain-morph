@@ -447,6 +447,84 @@ class Volume(torch.Tensor):
 
         # Здесь должна быть реализация поворота объема
 
+    def auto_mask(self, closing_radius: int = 5) -> 'Volume':
+        """Binary tissue mask via Otsu threshold + morphological closing.
+
+        Works on the mean across channels. Returns ``Volume (1, D, H, W)`` bool.
+
+        Args:
+            closing_radius: Radius for morphological closing (fills holes up to
+                            this size). 0 = skip closing.
+        """
+        vol = self.float().mean(0)  # (D, H, W)
+        flat = vol.flatten()
+
+        # Otsu threshold: maximise inter-class variance
+        n_bins = 256
+        hist = torch.histc(flat, bins=n_bins, min=flat.min().item(), max=flat.max().item())
+        hist = hist / hist.sum()
+        cdf = hist.cumsum(0)
+        mean_total = (hist * torch.arange(n_bins, dtype=hist.dtype, device=hist.device)).sum()
+
+        w0 = cdf.clamp_min(1e-12)
+        w1 = (1 - cdf).clamp_min(1e-12)
+        mean0 = (hist * torch.arange(n_bins, dtype=hist.dtype, device=hist.device)).cumsum(0) / w0
+        mean1 = (mean_total - mean0 * w0) / w1
+        sigma_b = w0 * w1 * (mean0 - mean1) ** 2
+        best_bin = int(sigma_b.argmax().item())
+        threshold = flat.min() + (flat.max() - flat.min()) * best_bin / n_bins
+
+        mask = (vol > threshold).float().unsqueeze(0).unsqueeze(0)  # (1, 1, D, H, W)
+
+        if closing_radius > 0:
+            k = 2 * closing_radius + 1
+            # Dilation then erosion (closing)
+            mask = F.max_pool3d(mask, kernel_size=k, stride=1, padding=closing_radius)
+            mask = -F.max_pool3d(-mask, kernel_size=k, stride=1, padding=closing_radius)
+
+        mask = mask.squeeze(0).bool()  # (1, D, H, W)
+        return Volume(mask, affine=self.affine)
+
+    def overlay(self, other: 'Volume', channel: int = 0) -> None:
+        """Visualise self (green) and other (fixed, red) as middle slices in 3 projections.
+
+        Args:
+            other:   Reference volume, same spatial shape as self.
+            channel: Which channel to use from each volume.
+        """
+        a = self.float()[channel]    # (D, H, W)
+        b = other.float()[channel]   # (D, H, W)
+
+        # Normalise each to [0, 1] independently
+        def _norm(t: torch.Tensor) -> torch.Tensor:
+            lo, hi = t.amin(), t.amax()
+            return (t - lo) / (hi - lo + 1e-12)
+
+        a, b = _norm(a), _norm(b)
+        D, H, W = a.shape
+
+        def _rgb(moving_slice, fixed_slice):
+            """Compose RGB: moving=green, fixed=red, overlap=yellow."""
+            r = fixed_slice
+            g = moving_slice
+            bl = torch.zeros_like(r)
+            return torch.stack([r, g, bl], dim=-1).clamp(0, 1).cpu().numpy()
+
+        slices = [
+            ("XY (mid D)", _rgb(a[D // 2], b[D // 2])),
+            ("XZ (mid H)", _rgb(a[:, H // 2, :], b[:, H // 2, :])),
+            ("YZ (mid W)", _rgb(a[:, :, W // 2], b[:, :, W // 2])),
+        ]
+
+        fig, axes = plt.subplots(1, 3, figsize=(13, 4))
+        for ax, (title, img) in zip(axes, slices):
+            ax.imshow(img, aspect='auto')
+            ax.set_title(title, fontsize=10)
+            ax.axis('off')
+        fig.suptitle("Green = moving,  Red = fixed,  Yellow = overlap", fontsize=10, y=1.01)
+        plt.tight_layout()
+        plt.show()
+
     def mesh_transform(self, mesh_vertices:torch.Tensor, mesh_displacements:torch.Tensor):
         """
         Применяет трансформацию к объему на основе заданных вершин сетки и смещений.
